@@ -1,2 +1,37 @@
 # devclean-ai
 
+DevClean AI is a TUI storage manager for developer projects. It scans for `package.json` files, scores risk, and helps you safely remove low-value project folders.
+
+## Install
+
+```bash
+npm install --global devclean-ai
+```
+
+## CLI
+
+```bash
+$ devclean-ai --help
+
+Usage
+  $ devclean-ai [--path <dir>] [--dry-run] [--no-ai]
+
+Options
+  --path       Root folder to scan (default: cwd)
+  --dry-run    Skip deletion, report actions only
+  --no-ai      Disable Gemini calls (heuristics only)
+
+Examples
+  $ devclean-ai --path ~/Projects
+  $ devclean-ai --dry-run
+```
+
+## Development
+
+```bash
+npm install
+npm run build
+node dist/cli.js
+```
+
+See `docs/ARCH.md` and `docs/TASKS.md` for architecture rules and the roadmap.

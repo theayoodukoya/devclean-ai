@@ -7,23 +7,41 @@ import App from './app.js';
 const cli = meow(
 	`
 	Usage
-	  $ devclean-ai
+	  $ devclean-ai [--path <dir>] [--dry-run] [--no-ai]
 
 	Options
-		--name  Your name
+	  --path       Root folder to scan (default: cwd)
+	  --dry-run    Skip deletion, report actions only
+	  --no-ai      Disable Gemini calls (heuristics only)
 
 	Examples
-	  $ devclean-ai --name=Jane
-	  Hello, Jane
-`,
+	  $ devclean-ai --path ~/Projects
+	  $ devclean-ai --dry-run
+	`,
 	{
 		importMeta: import.meta,
 		flags: {
-			name: {
+			path: {
 				type: 'string',
+				default: process.cwd(),
+			},
+			dryRun: {
+				type: 'boolean',
+				default: false,
+			},
+			ai: {
+				type: 'boolean',
+				default: true,
 			},
 		},
 	},
 );
 
-render(<App name={cli.flags.name} />);
+render(
+	<App
+		rootPath={cli.flags.path}
+		dryRun={cli.flags.dryRun}
+		aiEnabled={cli.flags.ai}
+		apiKey={process.env.GEMINI_API_KEY}
+	/>,
+);
