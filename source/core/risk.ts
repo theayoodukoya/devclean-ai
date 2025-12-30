@@ -1,7 +1,8 @@
 import {ProjectMeta, RiskAssessment, RiskClass} from './types.js';
 import {isBurnerName} from './scanner.js';
 
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+const clamp = (value: number, min: number, max: number) =>
+	Math.min(max, Math.max(min, value));
 
 const classify = (score: number): RiskClass => {
 	if (score >= 8) return 'Critical';
@@ -58,11 +59,15 @@ export const evaluateHeuristicRisk = (project: ProjectMeta): RiskAssessment => {
 	};
 };
 
-export const mergeRisk = (heuristic: RiskAssessment, ai: RiskAssessment | null): RiskAssessment => {
+export const mergeRisk = (
+	heuristic: RiskAssessment,
+	ai: RiskAssessment | null,
+): RiskAssessment => {
 	if (!ai) return heuristic;
 
 	const score = clamp(Math.round((heuristic.score + ai.score) / 2), 0, 10);
-	const className: RiskClass = score >= 8 ? 'Critical' : score >= 5 ? 'Active' : 'Burner';
+	const className: RiskClass =
+		score >= 8 ? 'Critical' : score >= 5 ? 'Active' : 'Burner';
 	const reasons = Array.from(new Set([...heuristic.reasons, ...ai.reasons]));
 
 	return {

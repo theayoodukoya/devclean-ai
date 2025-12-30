@@ -5,7 +5,12 @@ import path from 'node:path';
 import {scanProjects} from './core/scanner.js';
 import {evaluateHeuristicRisk, mergeRisk} from './core/risk.js';
 import {classifyWithGemini, hashFile} from './core/ai.js';
-import {readCache, writeCache, getCachedAssessment, setCachedAssessment} from './core/cache.js';
+import {
+	readCache,
+	writeCache,
+	getCachedAssessment,
+	setCachedAssessment,
+} from './core/cache.js';
 import {ProjectRecord} from './core/types.js';
 import {useStore} from './store/useStore.js';
 import {Header} from './ui/Header.js';
@@ -27,7 +32,13 @@ const removePaths = async (paths: string[]) => {
 	}
 };
 
-export default function App({rootPath, dryRun, aiEnabled, apiKey, scanAll}: AppProps) {
+export default function App({
+	rootPath,
+	dryRun,
+	aiEnabled,
+	apiKey,
+	scanAll,
+}: AppProps) {
 	const {exit} = useApp();
 	const needsApiKey = aiEnabled && !apiKey;
 
@@ -61,7 +72,10 @@ export default function App({rootPath, dryRun, aiEnabled, apiKey, scanAll}: AppP
 	const updateConfirmText = useStore(state => state.updateConfirmText);
 
 	const selectedCount = selectedIds.size;
-	const totalSizeBytes = projects.reduce((total, project) => total + project.sizeBytes, 0);
+	const totalSizeBytes = projects.reduce(
+		(total, project) => total + project.sizeBytes,
+		0,
+	);
 	const selectedSizeBytes = projects
 		.filter(project => selectedIds.has(project.id))
 		.reduce((total, project) => total + project.sizeBytes, 0);
@@ -99,14 +113,23 @@ export default function App({rootPath, dryRun, aiEnabled, apiKey, scanAll}: AppP
 
 					if (aiEnabled && apiKey) {
 						const hash = await hashFile(project.packageJsonPath);
-						const cached = getCachedAssessment(cache, project.packageJsonPath, hash);
+						const cached = getCachedAssessment(
+							cache,
+							project.packageJsonPath,
+							hash,
+						);
 						if (cached) {
 							aiAssessment = cached;
 						} else {
 							const result = await classifyWithGemini(project, hash, {apiKey});
 							if (result) {
 								aiAssessment = result;
-								setCachedAssessment(cache, project.packageJsonPath, hash, result);
+								setCachedAssessment(
+									cache,
+									project.packageJsonPath,
+									hash,
+									result,
+								);
 							}
 						}
 					}
@@ -135,7 +158,17 @@ export default function App({rootPath, dryRun, aiEnabled, apiKey, scanAll}: AppP
 		return () => {
 			active = false;
 		};
-	}, [rootPath, aiEnabled, apiKey, needsApiKey, scanAll, setProjects, setLoading, setError, setStatus]);
+	}, [
+		rootPath,
+		aiEnabled,
+		apiKey,
+		needsApiKey,
+		scanAll,
+		setProjects,
+		setLoading,
+		setError,
+		setStatus,
+	]);
 
 	useInput((input, key) => {
 		if (needsApiKey) {
@@ -175,12 +208,20 @@ export default function App({rootPath, dryRun, aiEnabled, apiKey, scanAll}: AppP
 								await removePaths(selectedPaths);
 							}
 
-							const remaining = projects.filter(project => !selectedIds.has(project.id));
+							const remaining = projects.filter(
+								project => !selectedIds.has(project.id),
+							);
 							setProjects(remaining);
 							clearSelection();
-							setStatus(storeDryRun ? 'Dry run complete. No changes made.' : 'Deleted selected projects.');
+							setStatus(
+								storeDryRun
+									? 'Dry run complete. No changes made.'
+									: 'Deleted selected projects.',
+							);
 						} catch (error: unknown) {
-							setStatus(error instanceof Error ? error.message : 'Delete failed.');
+							setStatus(
+								error instanceof Error ? error.message : 'Delete failed.',
+							);
 						} finally {
 							cancelDelete();
 						}
@@ -284,7 +325,11 @@ export default function App({rootPath, dryRun, aiEnabled, apiKey, scanAll}: AppP
 		<Box flexDirection="column">
 			<Header />
 			{fullDiskBanner}
-			<ProjectList projects={projects} cursorIndex={cursorIndex} selectedIds={selectedIds} />
+			<ProjectList
+				projects={projects}
+				cursorIndex={cursorIndex}
+				selectedIds={selectedIds}
+			/>
 			<FooterStatus
 				projects={projects}
 				selectedCount={selectedCount}

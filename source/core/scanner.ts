@@ -17,32 +17,39 @@ const DEFAULT_IGNORES = [
 
 const STARTUP_KEYWORDS = ['startup', 'production', 'prod'];
 
-const NAME_BURNER_HINTS = ['tutorial', 'test', 'boilerplate', 'example', 'sample'];
+const NAME_BURNER_HINTS = [
+	'tutorial',
+	'test',
+	'boilerplate',
+	'example',
+	'sample',
+];
 
 const nowMs = () => Date.now();
 const execFileAsync = promisify(execFile);
 
-const FULL_DISK_IGNORES = process.platform === 'win32'
-	? [
-			'Windows/**',
-			'Program Files/**',
-			'Program Files (x86)/**',
-			'ProgramData/**',
-			'$Recycle.Bin/**',
-			'System Volume Information/**',
-		]
-	: [
-			'System/**',
-			'Library/**',
-			'Applications/**',
-			'private/**',
-			'Volumes/**',
-			'proc/**',
-			'dev/**',
-			'sys/**',
-			'run/**',
-			'tmp/**',
-		];
+const FULL_DISK_IGNORES =
+	process.platform === 'win32'
+		? [
+				'Windows/**',
+				'Program Files/**',
+				'Program Files (x86)/**',
+				'ProgramData/**',
+				'$Recycle.Bin/**',
+				'System Volume Information/**',
+		  ]
+		: [
+				'System/**',
+				'Library/**',
+				'Applications/**',
+				'private/**',
+				'Volumes/**',
+				'proc/**',
+				'dev/**',
+				'sys/**',
+				'run/**',
+				'tmp/**',
+		  ];
 
 const buildIgnore = (scanAll: boolean) =>
 	scanAll ? [...DEFAULT_IGNORES, ...FULL_DISK_IGNORES] : DEFAULT_IGNORES;
@@ -65,7 +72,12 @@ const fileExists = async (filePath: string) => {
 };
 
 const getDependencyCount = (pkg: Record<string, unknown>) => {
-	const depBuckets = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
+	const depBuckets = [
+		'dependencies',
+		'devDependencies',
+		'peerDependencies',
+		'optionalDependencies',
+	];
 	return depBuckets.reduce((total, key) => {
 		const bucket = pkg[key] as Record<string, string> | undefined;
 		return total + (bucket ? Object.keys(bucket).length : 0);
@@ -73,22 +85,22 @@ const getDependencyCount = (pkg: Record<string, unknown>) => {
 };
 
 const hasStartupSignal = (pkg: Record<string, unknown>, name: string) => {
-	const keywordField = Array.isArray(pkg.keywords) ? pkg.keywords : [];
+	const keywordField = Array.isArray(pkg['keywords']) ? pkg['keywords'] : [];
 	const keywordText = keywordField.join(' ').toLowerCase();
-	const scripts = (pkg.scripts ?? {}) as Record<string, string>;
+	const scripts = (pkg['scripts'] ?? {}) as Record<string, string>;
 	const scriptsText = Object.values(scripts).join(' ').toLowerCase();
 	const nameText = name.toLowerCase();
-	return STARTUP_KEYWORDS.some(keyword =>
-		keywordText.includes(keyword) || scriptsText.includes(keyword) || nameText.includes(keyword),
+	return STARTUP_KEYWORDS.some(
+		keyword =>
+			keywordText.includes(keyword) ||
+			scriptsText.includes(keyword) ||
+			nameText.includes(keyword),
 	);
 };
 
 const getLastModified = async (projectDir: string, packageJsonPath: string) => {
 	// Keep this light: use package.json mtime and a small sample of common files.
-	const patterns = [
-		'package.json',
-		'**/*.{ts,tsx,js,jsx,json,md}',
-	];
+	const patterns = ['package.json', '**/*.{ts,tsx,js,jsx,json,md}'];
 
 	const entries = await fg(patterns, {
 		cwd: projectDir,
@@ -160,7 +172,10 @@ export type ScanOptions = {
 	scanAll?: boolean;
 };
 
-export const scanProjects = async (root: string, options: ScanOptions = {}): Promise<ProjectMeta[]> => {
+export const scanProjects = async (
+	root: string,
+	options: ScanOptions = {},
+): Promise<ProjectMeta[]> => {
 	const ignore = buildIgnore(Boolean(options.scanAll));
 	const packageJsonPaths = await fg('**/package.json', {
 		cwd: root,
@@ -183,17 +198,28 @@ export const scanProjects = async (root: string, options: ScanOptions = {}): Pro
 			// Skip unreadable package.json files.
 			continue;
 		}
-		const name = typeof pkg.name === 'string' && pkg.name.trim().length > 0 ? pkg.name : path.basename(projectDir);
+		const name =
+			typeof pkg['name'] === 'string' && pkg['name'].trim().length > 0
+				? pkg['name']
+				: path.basename(projectDir);
 
 		const dependencyCount = getDependencyCount(pkg);
 		const hasGit = await fileExists(path.join(projectDir, '.git'));
-		const hasEnvFile = (
-			await fg('.env*', {cwd: projectDir, onlyFiles: true, deep: 1, suppressErrors: true})
-		).length > 0;
+		const hasEnvFile =
+			(
+				await fg('.env*', {
+					cwd: projectDir,
+					onlyFiles: true,
+					deep: 1,
+					suppressErrors: true,
+				})
+			).length > 0;
 		const hasStartupKeyword = hasStartupSignal(pkg, name);
 		const lastModified = await getLastModified(projectDir, packageJsonPath);
 		const sizeBytes = await getDirectorySize(projectDir);
-		const lastModifiedDays = Math.floor((nowMs() - lastModified) / (1000 * 60 * 60 * 24));
+		const lastModifiedDays = Math.floor(
+			(nowMs() - lastModified) / (1000 * 60 * 60 * 24),
+		);
 
 		const id = projectDir;
 
@@ -215,4 +241,5 @@ export const scanProjects = async (root: string, options: ScanOptions = {}): Pro
 	return projects.sort((a, b) => a.path.localeCompare(b.path));
 };
 
-export const isBurnerName = (name: string) => NAME_BURNER_HINTS.some(hint => name.toLowerCase().includes(hint));
+export const isBurnerName = (name: string) =>
+	NAME_BURNER_HINTS.some(hint => name.toLowerCase().includes(hint));

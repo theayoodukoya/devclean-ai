@@ -36,17 +36,24 @@ export const FooterStatus = ({
 	return (
 		<Box flexDirection="column" marginTop={1}>
 			<Text color="#6B7280">
-				Critical {critical} | Active {active} | Burner {burner} | Selected {selectedCount}
+				Critical {critical} | Active {active} | Burner {burner} | Selected{' '}
+				{selectedCount}
 			</Text>
 			<Text color="#6B7280">
-				Total {formatBytes(totalSizeBytes)} | Selected {formatBytes(selectedSizeBytes)}
+				Total {formatBytes(totalSizeBytes)} | Selected{' '}
+				{formatBytes(selectedSizeBytes)}
 			</Text>
-			<Text color="#6B7280">AI {aiEnabled ? 'on' : 'off'} | Dry run {dryRun ? 'on' : 'off'}</Text>
+			<Text color="#6B7280">
+				AI {aiEnabled ? 'on' : 'off'} | Dry run {dryRun ? 'on' : 'off'}
+			</Text>
 			{deleteMode ? (
-				<Text color="#FF7A00">Type DELETE then Enter to confirm: {confirmText}</Text>
+				<Text color="#FF7A00">
+					Type DELETE then Enter to confirm: {confirmText}
+				</Text>
 			) : (
 				<Text color="#6B7280">
-					Arrows move | Space toggle | Shift+Arrow range | A select burners | D delete | Q quit
+					Arrows move | Space toggle | Shift+Arrow range | A select burners | D
+					delete | Q quit
 				</Text>
 			)}
 			{statusMessage ? <Text color="#FF7A00">{statusMessage}</Text> : null}

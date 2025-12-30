@@ -15,7 +15,8 @@ export type CacheFile = {
 
 const emptyCache = (): CacheFile => ({version: 1, entries: {}});
 
-export const getCachePath = (root: string) => path.join(root, '.devclean-cache.json');
+export const getCachePath = (root: string) =>
+	path.join(root, '.devclean-cache.json');
 
 export const readCache = async (root: string): Promise<CacheFile> => {
 	const cachePath = getCachePath(root);
@@ -36,14 +37,23 @@ export const writeCache = async (root: string, cache: CacheFile) => {
 	await fs.writeFile(cachePath, JSON.stringify(cache, null, 2), 'utf8');
 };
 
-export const getCachedAssessment = (cache: CacheFile, key: string, hash: string) => {
+export const getCachedAssessment = (
+	cache: CacheFile,
+	key: string,
+	hash: string,
+) => {
 	const entry = cache.entries[key];
 	if (!entry) return null;
 	if (entry.hash !== hash) return null;
 	return entry.assessment;
 };
 
-export const setCachedAssessment = (cache: CacheFile, key: string, hash: string, assessment: RiskAssessment) => {
+export const setCachedAssessment = (
+	cache: CacheFile,
+	key: string,
+	hash: string,
+	assessment: RiskAssessment,
+) => {
 	cache.entries[key] = {
 		hash,
 		assessment,

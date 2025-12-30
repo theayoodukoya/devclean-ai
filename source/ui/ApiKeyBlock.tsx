@@ -10,8 +10,7 @@ export const ApiKeyBlock = () => (
 			{chalk.hex('#0047AB')('export GEMINI_API_KEY="your_key_here"')}
 		</Text>
 		<Text>
-			Or run with heuristics only:{' '}
-			{chalk.hex('#0047AB')('devclean-ai --no-ai')}
+			Or run with heuristics only: {chalk.hex('#0047AB')('devclean-ai --no-ai')}
 		</Text>
 		<Text color="#6B7280">Press Q to quit.</Text>
 	</Box>

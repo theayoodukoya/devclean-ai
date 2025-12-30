@@ -43,14 +43,16 @@ const cli = meow(
 	},
 );
 
-const rootPath = cli.flags.all ? path.parse(process.cwd()).root : cli.flags.path;
+const rootPath = cli.flags.all
+	? path.parse(process.cwd()).root
+	: cli.flags.path;
 
 render(
 	<App
 		rootPath={rootPath}
 		dryRun={cli.flags.dryRun}
 		aiEnabled={cli.flags.ai}
-		apiKey={process.env.GEMINI_API_KEY}
+		apiKey={process.env['GEMINI_API_KEY']}
 		scanAll={cli.flags.all}
 	/>,
 );

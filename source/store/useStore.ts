@@ -53,7 +53,10 @@ export const useStore = create<StoreState & StoreActions>((set, get) => ({
 	moveCursor: delta => {
 		const {projects, cursorIndex} = get();
 		if (projects.length === 0) return;
-		const next = Math.max(0, Math.min(projects.length - 1, cursorIndex + delta));
+		const next = Math.max(
+			0,
+			Math.min(projects.length - 1, cursorIndex + delta),
+		);
 		set({cursorIndex: next});
 	},
 	setCursor: index => {

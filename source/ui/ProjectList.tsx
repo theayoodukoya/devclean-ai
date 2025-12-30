@@ -23,16 +23,25 @@ export type ProjectListProps = {
 	selectedIds: Set<string>;
 };
 
-export const ProjectList = ({projects, cursorIndex, selectedIds}: ProjectListProps) => {
+export const ProjectList = ({
+	projects,
+	cursorIndex,
+	selectedIds,
+}: ProjectListProps) => {
 	if (projects.length === 0) {
-		return <Text color="#6B7280">No projects found. Try running from a folder with package.json files.</Text>;
+		return (
+			<Text color="#6B7280">
+				No projects found. Try running from a folder with package.json files.
+			</Text>
+		);
 	}
 
 	return (
 		<Box flexDirection="column">
 			<Box>
 				<Text color="#6B7280">
-					{' '}Sel{' '}  {' '}Name{' '.repeat(20)} {' '}Risk{' '}  {' '}Score{' '}  {' '}Modified{' '}  {' '}Size{' '}  {' '}Path
+					{' '}
+					Sel Name{' '.repeat(20)} Risk Score Modified Size Path
 				</Text>
 			</Box>
 			{projects.map((project, index) => {
@@ -48,18 +57,24 @@ export const ProjectList = ({projects, cursorIndex, selectedIds}: ProjectListPro
 				const score = project.risk.score.toString().padEnd(5);
 				const rowColor = isSelected ? selectionFg : undefined;
 				const rowBackground = isSelected ? selectionBg : undefined;
-				const riskColor = isSelected ? selectionFg : riskColors[project.risk.className];
+				const riskColor = isSelected
+					? selectionFg
+					: riskColors[project.risk.className];
 
 				return (
 					<Box key={project.id}>
 						<Text color={rowColor} backgroundColor={rowBackground}>
-							{cursor}{indicator} {name}
+							{cursor}
+							{indicator} {name}
 						</Text>
 						<Text color={riskColor} backgroundColor={rowBackground}>
 							{label}
 						</Text>
 						<Text color={rowColor} backgroundColor={rowBackground}>
-							{score}{modified}{sizeLabel}{pathLabel}
+							{score}
+							{modified}
+							{sizeLabel}
+							{pathLabel}
 						</Text>
 					</Box>
 				);
