@@ -1,6 +1,7 @@
 import React from 'react';
 import {Box, Text} from 'ink';
 import {ProjectRecord} from '../core/types.js';
+import {formatBytes} from './format.js';
 
 export type FooterStatusProps = {
 	projects: ProjectRecord[];
@@ -10,6 +11,8 @@ export type FooterStatusProps = {
 	aiEnabled: boolean;
 	deleteMode: boolean;
 	confirmText: string;
+	totalSizeBytes: number;
+	selectedSizeBytes: number;
 };
 
 const countBy = (projects: ProjectRecord[], className: string) =>
@@ -23,6 +26,8 @@ export const FooterStatus = ({
 	aiEnabled,
 	deleteMode,
 	confirmText,
+	totalSizeBytes,
+	selectedSizeBytes,
 }: FooterStatusProps) => {
 	const critical = countBy(projects, 'Critical');
 	const active = countBy(projects, 'Active');
@@ -32,6 +37,9 @@ export const FooterStatus = ({
 		<Box flexDirection="column" marginTop={1}>
 			<Text color="#6B7280">
 				Critical {critical} | Active {active} | Burner {burner} | Selected {selectedCount}
+			</Text>
+			<Text color="#6B7280">
+				Total {formatBytes(totalSizeBytes)} | Selected {formatBytes(selectedSizeBytes)}
 			</Text>
 			<Text color="#6B7280">AI {aiEnabled ? 'on' : 'off'} | Dry run {dryRun ? 'on' : 'off'}</Text>
 			{deleteMode ? (

@@ -20,6 +20,7 @@ export type ProjectMeta = {
 	hasStartupKeyword: boolean;
 	lastModified: number;
 	lastModifiedDays: number;
+	sizeBytes: number;
 };
 
 export type ProjectRecord = ProjectMeta & {

@@ -29,3 +29,9 @@
 - Ink UI uses a cobalt blue primary and bright orange for destructive cues.
 - Selection uses an inverted background (white on blue).
 - Every state is readable without color (labels and text markers).
+- If AI is enabled and `GEMINI_API_KEY` is missing, the UI must block with setup instructions.
+
+## Full-Disk Scan Rules
+- `--all` scans the current drive root and shows a warning banner in the UI.
+- Scanner must suppress permission errors and continue.
+- Skip lists are applied to avoid system directories during full-disk scans.

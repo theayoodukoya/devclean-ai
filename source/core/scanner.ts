@@ -1,5 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 import fg from 'fast-glob';
 import {ProjectMeta} from './types.js';
 
@@ -18,6 +20,32 @@ const STARTUP_KEYWORDS = ['startup', 'production', 'prod'];
 const NAME_BURNER_HINTS = ['tutorial', 'test', 'boilerplate', 'example', 'sample'];
 
 const nowMs = () => Date.now();
+const execFileAsync = promisify(execFile);
+
+const FULL_DISK_IGNORES = process.platform === 'win32'
+	? [
+			'Windows/**',
+			'Program Files/**',
+			'Program Files (x86)/**',
+			'ProgramData/**',
+			'$Recycle.Bin/**',
+			'System Volume Information/**',
+		]
+	: [
+			'System/**',
+			'Library/**',
+			'Applications/**',
+			'private/**',
+			'Volumes/**',
+			'proc/**',
+			'dev/**',
+			'sys/**',
+			'run/**',
+			'tmp/**',
+		];
+
+const buildIgnore = (scanAll: boolean) =>
+	scanAll ? [...DEFAULT_IGNORES, ...FULL_DISK_IGNORES] : DEFAULT_IGNORES;
 
 const safeParseJson = <T>(raw: string, fallback: T): T => {
 	try {
@@ -67,6 +95,7 @@ const getLastModified = async (projectDir: string, packageJsonPath: string) => {
 		absolute: true,
 		onlyFiles: true,
 		ignore: DEFAULT_IGNORES,
+		suppressErrors: true,
 		deep: 2,
 	});
 
@@ -90,26 +119,80 @@ const getLastModified = async (projectDir: string, packageJsonPath: string) => {
 	return latest || (await fs.stat(packageJsonPath)).mtimeMs;
 };
 
-export const scanProjects = async (root: string): Promise<ProjectMeta[]> => {
+const getDirectorySize = async (projectDir: string) => {
+	if (process.platform !== 'win32') {
+		try {
+			const {stdout} = await execFileAsync('du', ['-sk', projectDir]);
+			const match = stdout.trim().match(/^(\d+)/);
+			if (match) {
+				return Number(match[1]) * 1024;
+			}
+		} catch {
+			// Fallback to manual traversal.
+		}
+	}
+
+	const entries = await fg('**/*', {
+		cwd: projectDir,
+		absolute: true,
+		onlyFiles: true,
+		followSymbolicLinks: false,
+		dot: true,
+		suppressErrors: true,
+	});
+
+	let total = 0;
+	for (const entry of entries) {
+		try {
+			const stats = await fs.stat(entry);
+			if (stats.isFile()) {
+				total += stats.size;
+			}
+		} catch {
+			// Ignore missing files during scan.
+		}
+	}
+
+	return total;
+};
+
+export type ScanOptions = {
+	scanAll?: boolean;
+};
+
+export const scanProjects = async (root: string, options: ScanOptions = {}): Promise<ProjectMeta[]> => {
+	const ignore = buildIgnore(Boolean(options.scanAll));
 	const packageJsonPaths = await fg('**/package.json', {
 		cwd: root,
 		absolute: true,
-		ignore: DEFAULT_IGNORES,
+		ignore,
+		dot: true,
+		followSymbolicLinks: false,
+		suppressErrors: true,
 	});
 
 	const projects: ProjectMeta[] = [];
 
 	for (const packageJsonPath of packageJsonPaths) {
 		const projectDir = path.dirname(packageJsonPath);
-		const packageRaw = await fs.readFile(packageJsonPath, 'utf8');
-		const pkg = safeParseJson<Record<string, unknown>>(packageRaw, {});
+		let pkg: Record<string, unknown> = {};
+		try {
+			const packageRaw = await fs.readFile(packageJsonPath, 'utf8');
+			pkg = safeParseJson<Record<string, unknown>>(packageRaw, {});
+		} catch {
+			// Skip unreadable package.json files.
+			continue;
+		}
 		const name = typeof pkg.name === 'string' && pkg.name.trim().length > 0 ? pkg.name : path.basename(projectDir);
 
 		const dependencyCount = getDependencyCount(pkg);
 		const hasGit = await fileExists(path.join(projectDir, '.git'));
-		const hasEnvFile = (await fg('.env*', {cwd: projectDir, onlyFiles: true, deep: 1})).length > 0;
+		const hasEnvFile = (
+			await fg('.env*', {cwd: projectDir, onlyFiles: true, deep: 1, suppressErrors: true})
+		).length > 0;
 		const hasStartupKeyword = hasStartupSignal(pkg, name);
 		const lastModified = await getLastModified(projectDir, packageJsonPath);
+		const sizeBytes = await getDirectorySize(projectDir);
 		const lastModifiedDays = Math.floor((nowMs() - lastModified) / (1000 * 60 * 60 * 24));
 
 		const id = projectDir;
@@ -125,6 +208,7 @@ export const scanProjects = async (root: string): Promise<ProjectMeta[]> => {
 			hasStartupKeyword,
 			lastModified,
 			lastModifiedDays,
+			sizeBytes,
 		});
 	}
 

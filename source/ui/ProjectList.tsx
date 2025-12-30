@@ -1,6 +1,7 @@
 import React from 'react';
 import {Box, Text} from 'ink';
 import {ProjectRecord, RiskClass} from '../core/types.js';
+import {formatBytes} from './format.js';
 
 const riskColors: Record<RiskClass, string> = {
 	Critical: '#FF7A00',
@@ -30,7 +31,9 @@ export const ProjectList = ({projects, cursorIndex, selectedIds}: ProjectListPro
 	return (
 		<Box flexDirection="column">
 			<Box>
-				<Text color="#6B7280">{' '}Sel{' '}  {' '}Name{' '.repeat(20)} {' '}Risk{' '}  {' '}Score{' '}  {' '}Modified{' '}  {' '}Path</Text>
+				<Text color="#6B7280">
+					{' '}Sel{' '}  {' '}Name{' '.repeat(20)} {' '}Risk{' '}  {' '}Score{' '}  {' '}Modified{' '}  {' '}Size{' '}  {' '}Path
+				</Text>
 			</Box>
 			{projects.map((project, index) => {
 				const isSelected = selectedIds.has(project.id);
@@ -40,7 +43,8 @@ export const ProjectList = ({projects, cursorIndex, selectedIds}: ProjectListPro
 				const label = project.risk.className.padEnd(7);
 				const name = safeTruncate(project.name, 24);
 				const modified = `${project.lastModifiedDays}d`.padEnd(9);
-				const pathLabel = safeTruncate(project.path, 48);
+				const sizeLabel = safeTruncate(formatBytes(project.sizeBytes), 8);
+				const pathLabel = safeTruncate(project.path, 44);
 				const score = project.risk.score.toString().padEnd(5);
 				const rowColor = isSelected ? selectionFg : undefined;
 				const rowBackground = isSelected ? selectionBg : undefined;
@@ -55,7 +59,7 @@ export const ProjectList = ({projects, cursorIndex, selectedIds}: ProjectListPro
 							{label}
 						</Text>
 						<Text color={rowColor} backgroundColor={rowBackground}>
-							{score}{modified}{pathLabel}
+							{score}{modified}{sizeLabel}{pathLabel}
 						</Text>
 					</Box>
 				);

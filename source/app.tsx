@@ -11,12 +11,14 @@ import {useStore} from './store/useStore.js';
 import {Header} from './ui/Header.js';
 import {ProjectList} from './ui/ProjectList.js';
 import {FooterStatus} from './ui/FooterStatus.js';
+import {ApiKeyBlock} from './ui/ApiKeyBlock.js';
 
 export type AppProps = {
 	rootPath: string;
 	dryRun: boolean;
 	aiEnabled: boolean;
 	apiKey: string | undefined;
+	scanAll: boolean;
 };
 
 const removePaths = async (paths: string[]) => {
@@ -25,8 +27,9 @@ const removePaths = async (paths: string[]) => {
 	}
 };
 
-export default function App({rootPath, dryRun, aiEnabled, apiKey}: AppProps) {
+export default function App({rootPath, dryRun, aiEnabled, apiKey, scanAll}: AppProps) {
 	const {exit} = useApp();
+	const needsApiKey = aiEnabled && !apiKey;
 
 	const projects = useStore(state => state.projects);
 	const selectedIds = useStore(state => state.selectedIds);
@@ -58,6 +61,13 @@ export default function App({rootPath, dryRun, aiEnabled, apiKey}: AppProps) {
 	const updateConfirmText = useStore(state => state.updateConfirmText);
 
 	const selectedCount = selectedIds.size;
+	const totalSizeBytes = projects.reduce((total, project) => total + project.sizeBytes, 0);
+	const selectedSizeBytes = projects
+		.filter(project => selectedIds.has(project.id))
+		.reduce((total, project) => total + project.sizeBytes, 0);
+	const fullDiskBanner = scanAll ? (
+		<Text color="#FF7A00">Full-disk scan enabled. This may take a while.</Text>
+	) : null;
 
 	useEffect(() => {
 		setDryRun(dryRun);
@@ -65,20 +75,22 @@ export default function App({rootPath, dryRun, aiEnabled, apiKey}: AppProps) {
 	}, [dryRun, aiEnabled, setDryRun, setAiEnabled]);
 
 	useEffect(() => {
+		if (needsApiKey) {
+			setLoading(false);
+			return;
+		}
+
 		let active = true;
 
 		const load = async () => {
 			setLoading(true);
 			setError(null);
 			setStatus(null);
-			if (aiEnabled && !apiKey) {
-				setStatus('GEMINI_API_KEY not set, using heuristics only.');
-			}
 
 			try {
 				const absoluteRoot = path.resolve(rootPath);
 				const cache = await readCache(absoluteRoot);
-				const discovered = await scanProjects(absoluteRoot);
+				const discovered = await scanProjects(absoluteRoot, {scanAll});
 				const records: ProjectRecord[] = [];
 
 				for (const project of discovered) {
@@ -123,9 +135,16 @@ export default function App({rootPath, dryRun, aiEnabled, apiKey}: AppProps) {
 		return () => {
 			active = false;
 		};
-	}, [rootPath, aiEnabled, apiKey, setProjects, setLoading, setError, setStatus]);
+	}, [rootPath, aiEnabled, apiKey, needsApiKey, scanAll, setProjects, setLoading, setError, setStatus]);
 
 	useInput((input, key) => {
+		if (needsApiKey) {
+			if (input && input.toLowerCase() === 'q') {
+				exit();
+			}
+			return;
+		}
+
 		if (deleteMode) {
 			if (key.escape) {
 				cancelDelete();
@@ -231,10 +250,21 @@ export default function App({rootPath, dryRun, aiEnabled, apiKey}: AppProps) {
 		}
 	});
 
+	if (needsApiKey) {
+		return (
+			<Box flexDirection="column">
+				<Header />
+				{fullDiskBanner}
+				<ApiKeyBlock />
+			</Box>
+		);
+	}
+
 	if (isLoading) {
 		return (
 			<Box flexDirection="column">
 				<Header />
+				{fullDiskBanner}
 				<Text color="#6B7280">Scanning projects...</Text>
 			</Box>
 		);
@@ -244,6 +274,7 @@ export default function App({rootPath, dryRun, aiEnabled, apiKey}: AppProps) {
 		return (
 			<Box flexDirection="column">
 				<Header />
+				{fullDiskBanner}
 				<Text color="#FF7A00">{error}</Text>
 			</Box>
 		);
@@ -252,6 +283,7 @@ export default function App({rootPath, dryRun, aiEnabled, apiKey}: AppProps) {
 	return (
 		<Box flexDirection="column">
 			<Header />
+			{fullDiskBanner}
 			<ProjectList projects={projects} cursorIndex={cursorIndex} selectedIds={selectedIds} />
 			<FooterStatus
 				projects={projects}
@@ -261,6 +293,8 @@ export default function App({rootPath, dryRun, aiEnabled, apiKey}: AppProps) {
 				aiEnabled={storeAiEnabled}
 				deleteMode={deleteMode}
 				confirmText={confirmText}
+				totalSizeBytes={totalSizeBytes}
+				selectedSizeBytes={selectedSizeBytes}
 			/>
 		</Box>
 	);
