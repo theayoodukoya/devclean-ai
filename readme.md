@@ -14,18 +14,20 @@ npm install --global devclean-ai
 $ devclean-ai --help
 
 Usage
-  $ devclean-ai [--path <dir>] [--all] [--dry-run] [--no-ai]
+  $ devclean-ai [--path <dir>] [--all] [--dry-run] [--no-ai] [--deps-only]
 
 Options
   --path       Root folder to scan (default: cwd)
   --all        Scan entire disk (current drive)
   --dry-run    Skip deletion, report actions only
   --no-ai      Disable Gemini calls (heuristics only)
+  --deps-only  Delete node_modules/.cache only (keep projects)
 
 Examples
   $ devclean-ai --path ~/Projects
   $ devclean-ai --all
   $ devclean-ai --dry-run
+  $ devclean-ai --deps-only
 ```
 
 ## Development

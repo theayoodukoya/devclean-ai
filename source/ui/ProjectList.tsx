@@ -1,5 +1,6 @@
 import React from 'react';
 import {Box, Text} from 'ink';
+import chalk from 'chalk';
 import {ProjectRecord, RiskClass} from '../core/types.js';
 import {formatBytes} from './format.js';
 
@@ -21,12 +22,14 @@ export type ProjectListProps = {
 	projects: ProjectRecord[];
 	cursorIndex: number;
 	selectedIds: Set<string>;
+	availableWidth: number;
 };
 
 export const ProjectList = ({
 	projects,
 	cursorIndex,
 	selectedIds,
+	availableWidth,
 }: ProjectListProps) => {
 	if (projects.length === 0) {
 		return (
@@ -36,48 +39,83 @@ export const ProjectList = ({
 		);
 	}
 
+	const selWidth = 5; // ">[ ] "
+	const riskWidth = 8;
+	const scoreWidth = 6;
+	const modifiedWidth = 9;
+	const sizeWidth = 9;
+	const minNameWidth = 16;
+	const maxNameWidth = 30;
+	const separators = 6;
+	const baseWidth = selWidth + riskWidth + scoreWidth + modifiedWidth + sizeWidth + separators;
+	const remaining = Math.max(20, availableWidth - baseWidth);
+	const nameWidth = Math.min(
+		maxNameWidth,
+		Math.max(minNameWidth, Math.floor(remaining * 0.35)),
+	);
+	const pathWidth = Math.max(20, availableWidth - (baseWidth + nameWidth));
+	const sep = ' ';
+
+	const header =
+		'Sel'.padEnd(selWidth) +
+		sep +
+		'Name'.padEnd(nameWidth) +
+		sep +
+		'Risk'.padEnd(riskWidth) +
+		sep +
+		'Score'.padEnd(scoreWidth) +
+		sep +
+		'Modified'.padEnd(modifiedWidth) +
+		sep +
+		'Size'.padEnd(sizeWidth) +
+		sep +
+		'Path'.padEnd(pathWidth);
+
 	return (
 		<Box flexDirection="column">
 			<Box>
-				<Text color="#6B7280">
-					{' '}
-					Sel Name{' '.repeat(20)} Risk Score Modified Size Path
-				</Text>
+				<Text color="#6B7280">{header}</Text>
 			</Box>
 			{projects.map((project, index) => {
 				const isSelected = selectedIds.has(project.id);
 				const isCursor = index === cursorIndex;
 				const indicator = isSelected ? '[x]' : '[ ]';
 				const cursor = isCursor ? '>' : ' ';
-				const label = project.risk.className.padEnd(7);
-				const name = safeTruncate(project.name, 24);
-				const modified = `${project.lastModifiedDays}d`.padEnd(9);
-				const sizeLabel = safeTruncate(formatBytes(project.sizeBytes), 8);
-				const pathLabel = safeTruncate(project.path, 44);
-				const score = project.risk.score.toString().padEnd(5);
-				const rowColor = isSelected ? selectionFg : undefined;
-				const rowBackground = isSelected ? selectionBg : undefined;
-				const riskColor = isSelected
-					? selectionFg
-					: riskColors[project.risk.className];
+				const label = project.risk.className.padEnd(riskWidth);
+				const name = safeTruncate(project.name, nameWidth).padEnd(nameWidth);
+				const modified = `${project.lastModifiedDays}d`.padEnd(modifiedWidth);
+				const sizeLabel = safeTruncate(formatBytes(project.sizeBytes), sizeWidth).padEnd(sizeWidth);
+				const pathLabel = safeTruncate(project.path, pathWidth);
+				const score = project.risk.score.toString().padEnd(scoreWidth);
+				const selText = `${cursor}${indicator} `.padEnd(selWidth);
 
-				return (
-					<Box key={project.id}>
-						<Text color={rowColor} backgroundColor={rowBackground}>
-							{cursor}
-							{indicator} {name}
+				const row =
+					selText +
+					sep +
+					name +
+					sep +
+					label +
+					sep +
+					score +
+					sep +
+					modified +
+					sep +
+					sizeLabel +
+					sep +
+					pathLabel;
+
+				if (isSelected) {
+					return (
+						<Text key={project.id} color={selectionFg} backgroundColor={selectionBg}>
+							{row}
 						</Text>
-						<Text color={riskColor} backgroundColor={rowBackground}>
-							{label}
-						</Text>
-						<Text color={rowColor} backgroundColor={rowBackground}>
-							{score}
-							{modified}
-							{sizeLabel}
-							{pathLabel}
-						</Text>
-					</Box>
-				);
+					);
+				}
+
+				const riskColor = riskColors[project.risk.className];
+				const rowWithRisk = row.replace(label, chalk.hex(riskColor)(label));
+
+				return <Text key={project.id}>{rowWithRisk}</Text>;
 			})}
 		</Box>
 	);

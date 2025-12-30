@@ -13,6 +13,10 @@ export type FooterStatusProps = {
 	confirmText: string;
 	totalSizeBytes: number;
 	selectedSizeBytes: number;
+	filterText: string;
+	sortKey: string;
+	sortDirection: string;
+	deleteDependenciesOnly: boolean;
 };
 
 const countBy = (projects: ProjectRecord[], className: string) =>
@@ -28,6 +32,10 @@ export const FooterStatus = ({
 	confirmText,
 	totalSizeBytes,
 	selectedSizeBytes,
+	filterText,
+	sortKey,
+	sortDirection,
+	deleteDependenciesOnly,
 }: FooterStatusProps) => {
 	const critical = countBy(projects, 'Critical');
 	const active = countBy(projects, 'Active');
@@ -46,14 +54,17 @@ export const FooterStatus = ({
 			<Text color="#6B7280">
 				AI {aiEnabled ? 'on' : 'off'} | Dry run {dryRun ? 'on' : 'off'}
 			</Text>
+			<Text color="#6B7280">
+				Sort {sortKey} ({sortDirection}) | Filter {filterText ? `"${filterText}"` : 'none'} | Deps-only{' '}
+				{deleteDependenciesOnly ? 'on' : 'off'}
+			</Text>
 			{deleteMode ? (
 				<Text color="#FF7A00">
 					Type DELETE then Enter to confirm: {confirmText}
 				</Text>
 			) : (
 				<Text color="#6B7280">
-					Arrows move | Space toggle | Shift+Arrow range | A select burners | D
-					delete | Q quit
+					Arrows move | Space toggle | Shift+Arrow range | A select burners | D delete | / filter | S sort | R order | X deps-only | Tab details | Q quit
 				</Text>
 			)}
 			{statusMessage ? <Text color="#FF7A00">{statusMessage}</Text> : null}

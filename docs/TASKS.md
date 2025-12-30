@@ -53,6 +53,7 @@
 - Phase 4: Check space toggles, shift+arrow selects range, and `A` selects burners.
 - Phase 5: Use `--dry-run` and verify no filesystem changes; confirm delete prompt.
 - Phase 6: Run `--all` and confirm warning banner + permission errors are skipped.
+- Phase 7: Run `--deps-only` and confirm only node_modules/.cache are removed.
 
 ## Runbook (Start Each Time)
 
@@ -70,6 +71,7 @@
 5. Re-run step 2 to verify cached AI results (no extra API calls).
 6. Unset the key and confirm AI preflight block: `unset GEMINI_API_KEY && node dist/cli.js --path ~/Projects`
 7. Full-disk scan warning: `node dist/cli.js --all`
+8. Dependencies-only delete: `node dist/cli.js --deps-only`
 
 ## Context Hygiene
 
@@ -91,3 +93,4 @@
 5. Dry run safety: `node dist/cli.js --path <your_test_dir> --dry-run`
 6. Heuristic-only: `node dist/cli.js --path <your_test_dir> --no-ai`
 7. Full-disk scan: `node dist/cli.js --all`
+8. Deps-only mode: `node dist/cli.js --deps-only`

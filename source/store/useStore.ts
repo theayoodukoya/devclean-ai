@@ -2,6 +2,7 @@ import {create} from 'zustand';
 import {ProjectRecord, RiskClass} from '../core/types.js';
 
 export type StoreState = {
+	allProjects: ProjectRecord[];
 	projects: ProjectRecord[];
 	selectedIds: Set<string>;
 	cursorIndex: number;
@@ -13,9 +14,16 @@ export type StoreState = {
 	confirmText: string;
 	dryRun: boolean;
 	aiEnabled: boolean;
+	showDetails: boolean;
+	filterText: string;
+	filterMode: boolean;
+	sortKey: 'size' | 'risk' | 'modified' | 'name';
+	sortDirection: 'asc' | 'desc';
+	deleteDependenciesOnly: boolean;
 };
 
 export type StoreActions = {
+	setAllProjects: (projects: ProjectRecord[]) => void;
 	setProjects: (projects: ProjectRecord[]) => void;
 	setLoading: (isLoading: boolean) => void;
 	setError: (error: string | null) => void;
@@ -32,9 +40,19 @@ export type StoreActions = {
 	updateConfirmText: (text: string) => void;
 	setDryRun: (dryRun: boolean) => void;
 	setAiEnabled: (enabled: boolean) => void;
+	toggleDetails: () => void;
+	startFilter: () => void;
+	stopFilter: () => void;
+	updateFilterText: (text: string) => void;
+	clearFilter: () => void;
+	cycleSort: () => void;
+	toggleSortDirection: () => void;
+	toggleDepsOnly: () => void;
+	setDepsOnly: (enabled: boolean) => void;
 };
 
 export const useStore = create<StoreState & StoreActions>((set, get) => ({
+	allProjects: [],
 	projects: [],
 	selectedIds: new Set(),
 	cursorIndex: 0,
@@ -46,6 +64,13 @@ export const useStore = create<StoreState & StoreActions>((set, get) => ({
 	confirmText: '',
 	dryRun: false,
 	aiEnabled: true,
+	showDetails: true,
+	filterText: '',
+	filterMode: false,
+	sortKey: 'size',
+	sortDirection: 'desc',
+	deleteDependenciesOnly: false,
+	setAllProjects: allProjects => set({allProjects}),
 	setProjects: projects => set({projects}),
 	setLoading: isLoading => set({isLoading}),
 	setError: error => set({error}),
@@ -104,4 +129,24 @@ export const useStore = create<StoreState & StoreActions>((set, get) => ({
 	updateConfirmText: text => set({confirmText: text}),
 	setDryRun: dryRun => set({dryRun}),
 	setAiEnabled: enabled => set({aiEnabled: enabled}),
+	toggleDetails: () => set(state => ({showDetails: !state.showDetails})),
+	startFilter: () => set({filterMode: true}),
+	stopFilter: () => set({filterMode: false}),
+	updateFilterText: text => set({filterText: text}),
+	clearFilter: () => set({filterText: '', filterMode: false}),
+	cycleSort: () => {
+		const {sortKey} = get();
+		const order: StoreState['sortKey'][] = ['size', 'risk', 'modified', 'name'];
+		const index = order.indexOf(sortKey);
+		const next = order[(index + 1) % order.length];
+		const defaultDir = next === 'name' ? 'asc' : 'desc';
+		set({sortKey: next, sortDirection: defaultDir});
+	},
+	toggleSortDirection: () => {
+		const {sortDirection} = get();
+		set({sortDirection: sortDirection === 'asc' ? 'desc' : 'asc'});
+	},
+	toggleDepsOnly: () =>
+		set(state => ({deleteDependenciesOnly: !state.deleteDependenciesOnly})),
+	setDepsOnly: enabled => set({deleteDependenciesOnly: enabled}),
 }));

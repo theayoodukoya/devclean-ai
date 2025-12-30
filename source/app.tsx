@@ -1,5 +1,5 @@
 import React, {useEffect} from 'react';
-import {Box, Text, useApp, useInput} from 'ink';
+import {Box, Text, useApp, useInput, useStdout} from 'ink';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {scanProjects} from './core/scanner.js';
@@ -17,6 +17,7 @@ import {Header} from './ui/Header.js';
 import {ProjectList} from './ui/ProjectList.js';
 import {FooterStatus} from './ui/FooterStatus.js';
 import {ApiKeyBlock} from './ui/ApiKeyBlock.js';
+import {ProjectDetails} from './ui/ProjectDetails.js';
 
 export type AppProps = {
 	rootPath: string;
@@ -24,6 +25,7 @@ export type AppProps = {
 	aiEnabled: boolean;
 	apiKey: string | undefined;
 	scanAll: boolean;
+	depsOnly: boolean;
 };
 
 const removePaths = async (paths: string[]) => {
@@ -32,17 +34,25 @@ const removePaths = async (paths: string[]) => {
 	}
 };
 
+const getDependencyTargets = (projectPath: string) => [
+	path.join(projectPath, 'node_modules'),
+	path.join(projectPath, '.cache'),
+];
+
 export default function App({
 	rootPath,
 	dryRun,
 	aiEnabled,
 	apiKey,
 	scanAll,
+	depsOnly,
 }: AppProps) {
 	const {exit} = useApp();
+	const {stdout} = useStdout();
 	const needsApiKey = aiEnabled && !apiKey;
 
 	const projects = useStore(state => state.projects);
+	const allProjects = useStore(state => state.allProjects);
 	const selectedIds = useStore(state => state.selectedIds);
 	const cursorIndex = useStore(state => state.cursorIndex);
 	const rangeAnchor = useStore(state => state.rangeAnchor);
@@ -53,7 +63,14 @@ export default function App({
 	const confirmText = useStore(state => state.confirmText);
 	const storeDryRun = useStore(state => state.dryRun);
 	const storeAiEnabled = useStore(state => state.aiEnabled);
+	const showDetails = useStore(state => state.showDetails);
+	const filterText = useStore(state => state.filterText);
+	const filterMode = useStore(state => state.filterMode);
+	const sortKey = useStore(state => state.sortKey);
+	const sortDirection = useStore(state => state.sortDirection);
+	const deleteDependenciesOnly = useStore(state => state.deleteDependenciesOnly);
 
+	const setAllProjects = useStore(state => state.setAllProjects);
 	const setProjects = useStore(state => state.setProjects);
 	const setLoading = useStore(state => state.setLoading);
 	const setError = useStore(state => state.setError);
@@ -70,15 +87,30 @@ export default function App({
 	const startDelete = useStore(state => state.startDelete);
 	const cancelDelete = useStore(state => state.cancelDelete);
 	const updateConfirmText = useStore(state => state.updateConfirmText);
+	const toggleDetails = useStore(state => state.toggleDetails);
+	const startFilter = useStore(state => state.startFilter);
+	const stopFilter = useStore(state => state.stopFilter);
+	const updateFilterText = useStore(state => state.updateFilterText);
+	const clearFilter = useStore(state => state.clearFilter);
+	const cycleSort = useStore(state => state.cycleSort);
+	const toggleSortDirection = useStore(state => state.toggleSortDirection);
+	const toggleDepsOnly = useStore(state => state.toggleDepsOnly);
+	const setDepsOnly = useStore(state => state.setDepsOnly);
 
 	const selectedCount = selectedIds.size;
-	const totalSizeBytes = projects.reduce(
+	const totalSizeBytes = allProjects.reduce(
 		(total, project) => total + project.sizeBytes,
 		0,
 	);
-	const selectedSizeBytes = projects
+	const selectedSizeBytes = allProjects
 		.filter(project => selectedIds.has(project.id))
 		.reduce((total, project) => total + project.sizeBytes, 0);
+	const selectedProject = projects[cursorIndex];
+	const columns = stdout?.columns ?? 120;
+	const maxListWidth = Math.max(40, columns - 2);
+	const listWidth = showDetails
+		? Math.min(columns, Math.max(60, Math.floor(columns * 0.6)))
+		: Math.min(columns, maxListWidth);
 	const fullDiskBanner = scanAll ? (
 		<Text color="#FF7A00">Full-disk scan enabled. This may take a while.</Text>
 	) : null;
@@ -86,7 +118,33 @@ export default function App({
 	useEffect(() => {
 		setDryRun(dryRun);
 		setAiEnabled(aiEnabled);
-	}, [dryRun, aiEnabled, setDryRun, setAiEnabled]);
+		setDepsOnly(depsOnly);
+	}, [dryRun, aiEnabled, depsOnly, setDryRun, setAiEnabled, setDepsOnly]);
+
+	useEffect(() => {
+		const term = filterText.trim().toLowerCase();
+		const filtered = term
+			? allProjects.filter(project =>
+					`${project.name} ${project.path}`.toLowerCase().includes(term),
+			  )
+			: allProjects;
+
+		const sorted = [...filtered].sort((a, b) => {
+			let result = 0;
+			if (sortKey === 'size') result = a.sizeBytes - b.sizeBytes;
+			if (sortKey === 'risk') result = a.risk.score - b.risk.score;
+			if (sortKey === 'modified') result = a.lastModified - b.lastModified;
+			if (sortKey === 'name') result = a.name.localeCompare(b.name);
+			return sortDirection === 'asc' ? result : -result;
+		});
+
+		setProjects(sorted);
+		if (sorted.length === 0) {
+			setCursor(0);
+		} else if (cursorIndex >= sorted.length) {
+			setCursor(sorted.length - 1);
+		}
+	}, [allProjects, filterText, sortKey, sortDirection, cursorIndex, setProjects, setCursor]);
 
 	useEffect(() => {
 		if (needsApiKey) {
@@ -140,6 +198,7 @@ export default function App({
 				await writeCache(absoluteRoot, cache);
 
 				if (active) {
+					setAllProjects(records);
 					setProjects(records);
 				}
 			} catch (error: unknown) {
@@ -164,6 +223,7 @@ export default function App({
 		apiKey,
 		needsApiKey,
 		scanAll,
+		setAllProjects,
 		setProjects,
 		setLoading,
 		setError,
@@ -175,6 +235,36 @@ export default function App({
 			if (input && input.toLowerCase() === 'q') {
 				exit();
 			}
+			return;
+		}
+
+		if (filterMode) {
+			if (key.escape) {
+				clearFilter();
+				setStatus('Filter cleared.');
+				return;
+			}
+
+			if (key.return) {
+				stopFilter();
+				return;
+			}
+
+			if (key.backspace) {
+				updateFilterText(filterText.slice(0, -1));
+				return;
+			}
+
+			if (input && input.length === 1) {
+				updateFilterText(`${filterText}${input}`.slice(0, 64));
+				return;
+			}
+
+			return;
+		}
+
+		if (key.tab) {
+			toggleDetails();
 			return;
 		}
 
@@ -192,7 +282,7 @@ export default function App({
 
 			if (key.return) {
 				if (confirmText === 'DELETE') {
-					const selectedPaths = projects
+					const selectedPaths = allProjects
 						.filter(project => selectedIds.has(project.id))
 						.map(project => project.path);
 
@@ -204,20 +294,36 @@ export default function App({
 
 					void (async () => {
 						try {
-							if (!storeDryRun) {
-								await removePaths(selectedPaths);
-							}
+							if (deleteDependenciesOnly) {
+								const dependencyTargets = selectedPaths.flatMap(path =>
+									getDependencyTargets(path),
+								);
+								if (!storeDryRun) {
+									await removePaths(dependencyTargets);
+								}
+								clearSelection();
+								setStatus(
+									storeDryRun
+										? 'Dry run complete. No changes made.'
+										: 'Dependencies removed for selected projects.',
+								);
+							} else {
+								if (!storeDryRun) {
+									await removePaths(selectedPaths);
+								}
 
-							const remaining = projects.filter(
-								project => !selectedIds.has(project.id),
-							);
-							setProjects(remaining);
-							clearSelection();
-							setStatus(
-								storeDryRun
-									? 'Dry run complete. No changes made.'
-									: 'Deleted selected projects.',
-							);
+								const remaining = allProjects.filter(
+									project => !selectedIds.has(project.id),
+								);
+								setAllProjects(remaining);
+								setProjects(remaining);
+								clearSelection();
+								setStatus(
+									storeDryRun
+										? 'Dry run complete. No changes made.'
+										: 'Deleted selected projects.',
+								);
+							}
 						} catch (error: unknown) {
 							setStatus(
 								error instanceof Error ? error.message : 'Delete failed.',
@@ -277,6 +383,31 @@ export default function App({
 			return;
 		}
 
+		if (input === '/') {
+			startFilter();
+			return;
+		}
+
+		if (input.toLowerCase() === 's') {
+			cycleSort();
+			setStatus('Sort updated.');
+			return;
+		}
+
+		if (input.toLowerCase() === 'r') {
+			toggleSortDirection();
+			setStatus('Sort order toggled.');
+			return;
+		}
+
+		if (input.toLowerCase() === 'x') {
+			toggleDepsOnly();
+			setStatus(
+				deleteDependenciesOnly ? 'Deps-only mode off.' : 'Deps-only mode on.',
+			);
+			return;
+		}
+
 		if (input.toLowerCase() === 'd') {
 			if (selectedIds.size === 0) {
 				setStatus('Select at least one project before deleting.');
@@ -325,11 +456,21 @@ export default function App({
 		<Box flexDirection="column">
 			<Header />
 			{fullDiskBanner}
-			<ProjectList
-				projects={projects}
-				cursorIndex={cursorIndex}
-				selectedIds={selectedIds}
-			/>
+			<Box flexDirection="row">
+				<Box width={listWidth} flexDirection="column">
+					<ProjectList
+						projects={projects}
+						cursorIndex={cursorIndex}
+						selectedIds={selectedIds}
+						availableWidth={listWidth}
+					/>
+				</Box>
+				{showDetails ? (
+					<Box flexGrow={1} flexDirection="column">
+						<ProjectDetails project={selectedProject} />
+					</Box>
+				) : null}
+			</Box>
 			<FooterStatus
 				projects={projects}
 				selectedCount={selectedCount}
@@ -340,6 +481,10 @@ export default function App({
 				confirmText={confirmText}
 				totalSizeBytes={totalSizeBytes}
 				selectedSizeBytes={selectedSizeBytes}
+				filterText={filterText}
+				sortKey={sortKey}
+				sortDirection={sortDirection}
+				deleteDependenciesOnly={deleteDependenciesOnly}
 			/>
 		</Box>
 	);

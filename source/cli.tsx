@@ -8,13 +8,14 @@ import App from './app.js';
 const cli = meow(
 	`
 	Usage
-	  $ devclean-ai [--path <dir>] [--all] [--dry-run] [--no-ai]
+	  $ devclean-ai [--path <dir>] [--all] [--dry-run] [--no-ai] [--deps-only]
 
 	Options
 	  --path       Root folder to scan (default: cwd)
 	  --all        Scan entire disk (current drive)
 	  --dry-run    Skip deletion, report actions only
 	  --no-ai      Disable Gemini calls (heuristics only)
+	  --deps-only  Delete node_modules/.cache only (keep projects)
 
 	Examples
 	  $ devclean-ai --path ~/Projects
@@ -28,6 +29,10 @@ const cli = meow(
 				default: process.cwd(),
 			},
 			all: {
+				type: 'boolean',
+				default: false,
+			},
+			depsOnly: {
 				type: 'boolean',
 				default: false,
 			},
@@ -54,5 +59,6 @@ render(
 		aiEnabled={cli.flags.ai}
 		apiKey={process.env['GEMINI_API_KEY']}
 		scanAll={cli.flags.all}
+		depsOnly={cli.flags.depsOnly}
 	/>,
 );
