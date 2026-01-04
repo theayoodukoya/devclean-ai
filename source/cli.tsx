@@ -34,7 +34,7 @@ const cli = meow(
 			},
 			depsOnly: {
 				type: 'boolean',
-				default: false,
+				default: true,
 			},
 			dryRun: {
 				type: 'boolean',

@@ -16,10 +16,10 @@ export type StoreState = {
 	aiEnabled: boolean;
 	showDetails: boolean;
 	filterText: string;
-	filterMode: boolean;
 	sortKey: 'size' | 'risk' | 'modified' | 'name';
 	sortDirection: 'asc' | 'desc';
 	deleteDependenciesOnly: boolean;
+	showAllReasons: boolean;
 };
 
 export type StoreActions = {
@@ -41,14 +41,13 @@ export type StoreActions = {
 	setDryRun: (dryRun: boolean) => void;
 	setAiEnabled: (enabled: boolean) => void;
 	toggleDetails: () => void;
-	startFilter: () => void;
-	stopFilter: () => void;
 	updateFilterText: (text: string) => void;
 	clearFilter: () => void;
 	cycleSort: () => void;
 	toggleSortDirection: () => void;
 	toggleDepsOnly: () => void;
 	setDepsOnly: (enabled: boolean) => void;
+	toggleReasons: () => void;
 };
 
 export const useStore = create<StoreState & StoreActions>((set, get) => ({
@@ -66,10 +65,10 @@ export const useStore = create<StoreState & StoreActions>((set, get) => ({
 	aiEnabled: true,
 	showDetails: true,
 	filterText: '',
-	filterMode: false,
 	sortKey: 'size',
 	sortDirection: 'desc',
-	deleteDependenciesOnly: false,
+	deleteDependenciesOnly: true,
+	showAllReasons: false,
 	setAllProjects: allProjects => set({allProjects}),
 	setProjects: projects => set({projects}),
 	setLoading: isLoading => set({isLoading}),
@@ -130,10 +129,8 @@ export const useStore = create<StoreState & StoreActions>((set, get) => ({
 	setDryRun: dryRun => set({dryRun}),
 	setAiEnabled: enabled => set({aiEnabled: enabled}),
 	toggleDetails: () => set(state => ({showDetails: !state.showDetails})),
-	startFilter: () => set({filterMode: true}),
-	stopFilter: () => set({filterMode: false}),
 	updateFilterText: text => set({filterText: text}),
-	clearFilter: () => set({filterText: '', filterMode: false}),
+	clearFilter: () => set({filterText: ''}),
 	cycleSort: () => {
 		const {sortKey} = get();
 		const order: StoreState['sortKey'][] = ['size', 'risk', 'modified', 'name'];
@@ -149,4 +146,5 @@ export const useStore = create<StoreState & StoreActions>((set, get) => ({
 	toggleDepsOnly: () =>
 		set(state => ({deleteDependenciesOnly: !state.deleteDependenciesOnly})),
 	setDepsOnly: enabled => set({deleteDependenciesOnly: enabled}),
+	toggleReasons: () => set(state => ({showAllReasons: !state.showAllReasons})),
 }));

@@ -64,7 +64,7 @@ export const FooterStatus = ({
 				</Text>
 			) : (
 				<Text color="#6B7280">
-					Arrows move | Space toggle | Shift+Arrow range | A select burners | D delete | / filter | S sort | R order | X deps-only | Tab details | Q quit
+					Type to filter | Esc clear | Arrows move | Space toggle | Shift+Arrow range | Ctrl+A select burners | Ctrl+D delete | Ctrl+S sort | Ctrl+R order | Ctrl+X deps-only | Ctrl+E reasons | Tab details | Ctrl+Q quit
 				</Text>
 			)}
 			{statusMessage ? <Text color="#FF7A00">{statusMessage}</Text> : null}

@@ -1,6 +1,7 @@
-import React, {useEffect} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {Box, Text, useApp, useInput, useStdout} from 'ink';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import {scanProjects} from './core/scanner.js';
 import {evaluateHeuristicRisk, mergeRisk} from './core/risk.js';
@@ -18,6 +19,8 @@ import {ProjectList} from './ui/ProjectList.js';
 import {FooterStatus} from './ui/FooterStatus.js';
 import {ApiKeyBlock} from './ui/ApiKeyBlock.js';
 import {ProjectDetails} from './ui/ProjectDetails.js';
+import {formatBytes, formatDuration} from './ui/format.js';
+import {ScanStatus} from './ui/ScanStatus.js';
 
 export type AppProps = {
 	rootPath: string;
@@ -64,8 +67,8 @@ export default function App({
 	const storeDryRun = useStore(state => state.dryRun);
 	const storeAiEnabled = useStore(state => state.aiEnabled);
 	const showDetails = useStore(state => state.showDetails);
+	const showAllReasons = useStore(state => state.showAllReasons);
 	const filterText = useStore(state => state.filterText);
-	const filterMode = useStore(state => state.filterMode);
 	const sortKey = useStore(state => state.sortKey);
 	const sortDirection = useStore(state => state.sortDirection);
 	const deleteDependenciesOnly = useStore(state => state.deleteDependenciesOnly);
@@ -88,14 +91,13 @@ export default function App({
 	const cancelDelete = useStore(state => state.cancelDelete);
 	const updateConfirmText = useStore(state => state.updateConfirmText);
 	const toggleDetails = useStore(state => state.toggleDetails);
-	const startFilter = useStore(state => state.startFilter);
-	const stopFilter = useStore(state => state.stopFilter);
 	const updateFilterText = useStore(state => state.updateFilterText);
 	const clearFilter = useStore(state => state.clearFilter);
 	const cycleSort = useStore(state => state.cycleSort);
 	const toggleSortDirection = useStore(state => state.toggleSortDirection);
 	const toggleDepsOnly = useStore(state => state.toggleDepsOnly);
 	const setDepsOnly = useStore(state => state.setDepsOnly);
+	const toggleReasons = useStore(state => state.toggleReasons);
 
 	const selectedCount = selectedIds.size;
 	const totalSizeBytes = allProjects.reduce(
@@ -114,6 +116,16 @@ export default function App({
 	const fullDiskBanner = scanAll ? (
 		<Text color="#FF7A00">Full-disk scan enabled. This may take a while.</Text>
 	) : null;
+	const [scanDurationMs, setScanDurationMs] = useState<number | null>(null);
+	const [scanElapsedMs, setScanElapsedMs] = useState<number | null>(null);
+	const [scanFoundCount, setScanFoundCount] = useState(0);
+	const [scanCurrentPath, setScanCurrentPath] = useState<string | null>(null);
+	const scanStartRef = useRef<number | null>(null);
+	const headerTotalLabel = isLoading ? '...' : formatBytes(totalSizeBytes);
+	const headerSelectedLabel = isLoading ? '...' : formatBytes(selectedSizeBytes);
+	const headerDurationLabel = isLoading
+		? formatDuration(scanElapsedMs)
+		: formatDuration(scanDurationMs);
 
 	useEffect(() => {
 		setDryRun(dryRun);
@@ -147,6 +159,18 @@ export default function App({
 	}, [allProjects, filterText, sortKey, sortDirection, cursorIndex, setProjects, setCursor]);
 
 	useEffect(() => {
+		if (!isLoading) return;
+		const id = setInterval(() => {
+			if (scanStartRef.current) {
+				setScanElapsedMs(Date.now() - scanStartRef.current);
+			}
+		}, 200);
+		return () => {
+			clearInterval(id);
+		};
+	}, [isLoading]);
+
+	useEffect(() => {
 		if (needsApiKey) {
 			setLoading(false);
 			return;
@@ -155,14 +179,31 @@ export default function App({
 		let active = true;
 
 		const load = async () => {
+			const startedAt = Date.now();
+			scanStartRef.current = startedAt;
+			setScanDurationMs(null);
+			setScanElapsedMs(0);
+			setScanFoundCount(0);
+			setScanCurrentPath(null);
 			setLoading(true);
 			setError(null);
 			setStatus(null);
 
 			try {
 				const absoluteRoot = path.resolve(rootPath);
-				const cache = await readCache(absoluteRoot);
-				const discovered = await scanProjects(absoluteRoot, {scanAll});
+				const cacheRoot = scanAll ? os.homedir() : absoluteRoot;
+				const cache = await readCache(cacheRoot);
+				let lastProgress = 0;
+				const discovered = await scanProjects(absoluteRoot, {
+					scanAll,
+					onProgress: progress => {
+						const now = Date.now();
+						if (now - lastProgress < 200) return;
+						lastProgress = now;
+						setScanFoundCount(progress.foundCount);
+						setScanCurrentPath(progress.currentPath);
+					},
+				});
 				const records: ProjectRecord[] = [];
 
 				for (const project of discovered) {
@@ -195,7 +236,7 @@ export default function App({
 					records.push({...project, risk: mergeRisk(heuristic, aiAssessment)});
 				}
 
-				await writeCache(absoluteRoot, cache);
+				await writeCache(cacheRoot, cache);
 
 				if (active) {
 					setAllProjects(records);
@@ -208,6 +249,9 @@ export default function App({
 			} finally {
 				if (active) {
 					setLoading(false);
+					setScanDurationMs(Date.now() - startedAt);
+					setScanElapsedMs(Date.now() - startedAt);
+					scanStartRef.current = null;
 				}
 			}
 		};
@@ -235,36 +279,6 @@ export default function App({
 			if (input && input.toLowerCase() === 'q') {
 				exit();
 			}
-			return;
-		}
-
-		if (filterMode) {
-			if (key.escape) {
-				clearFilter();
-				setStatus('Filter cleared.');
-				return;
-			}
-
-			if (key.return) {
-				stopFilter();
-				return;
-			}
-
-			if (key.backspace) {
-				updateFilterText(filterText.slice(0, -1));
-				return;
-			}
-
-			if (input && input.length === 1) {
-				updateFilterText(`${filterText}${input}`.slice(0, 64));
-				return;
-			}
-
-			return;
-		}
-
-		if (key.tab) {
-			toggleDetails();
 			return;
 		}
 
@@ -346,6 +360,88 @@ export default function App({
 			return;
 		}
 
+		if (key.tab) {
+			toggleDetails();
+			return;
+		}
+
+		if (key.ctrl && input) {
+			const code = input.charCodeAt(0);
+			const ctrlName = code >= 1 && code <= 26 ? String.fromCharCode(code + 96) : '';
+			if (!ctrlName) {
+				return;
+			}
+			if (ctrlName === 'a') {
+				selectAllByClass('Burner');
+				setStatus('Selected all burner projects.');
+				return;
+			}
+
+			if (ctrlName === 's') {
+				cycleSort();
+				setStatus('Sort updated.');
+				return;
+			}
+
+			if (ctrlName === 'r') {
+				toggleSortDirection();
+				setStatus('Sort order toggled.');
+				return;
+			}
+
+			if (ctrlName === 'x') {
+				toggleDepsOnly();
+				setStatus(
+					deleteDependenciesOnly
+						? 'Deps-only mode off.'
+						: 'Deps-only mode on.',
+				);
+				return;
+			}
+
+			if (ctrlName === 'e') {
+				toggleReasons();
+				setStatus(showAllReasons ? 'Showing top reasons.' : 'Showing all reasons.');
+				return;
+			}
+
+			if (ctrlName === 'd') {
+				if (selectedIds.size === 0) {
+					setStatus('Select at least one project before deleting.');
+					return;
+				}
+				startDelete();
+				return;
+			}
+
+			if (ctrlName === 'q') {
+				exit();
+				return;
+			}
+		}
+
+		if (key.escape) {
+			if (filterText.length > 0) {
+				clearFilter();
+				setStatus('Filter cleared.');
+			}
+			return;
+		}
+
+		if (key.backspace) {
+			if (filterText.length > 0) {
+				updateFilterText(filterText.slice(0, -1));
+			}
+			return;
+		}
+
+		if (input && input.length === 1) {
+			if (input !== ' ' && !key.return) {
+				updateFilterText(`${filterText}${input}`.slice(0, 64));
+				return;
+			}
+		}
+
 		if (key.upArrow) {
 			const nextIndex = Math.max(0, cursorIndex - 1);
 			if (key.shift) {
@@ -374,58 +470,17 @@ export default function App({
 
 		if (input === ' ') {
 			toggleSelect(cursorIndex);
-			return;
-		}
-
-		if (input.toLowerCase() === 'a') {
-			selectAllByClass('Burner');
-			setStatus('Selected all burner projects.');
-			return;
-		}
-
-		if (input === '/') {
-			startFilter();
-			return;
-		}
-
-		if (input.toLowerCase() === 's') {
-			cycleSort();
-			setStatus('Sort updated.');
-			return;
-		}
-
-		if (input.toLowerCase() === 'r') {
-			toggleSortDirection();
-			setStatus('Sort order toggled.');
-			return;
-		}
-
-		if (input.toLowerCase() === 'x') {
-			toggleDepsOnly();
-			setStatus(
-				deleteDependenciesOnly ? 'Deps-only mode off.' : 'Deps-only mode on.',
-			);
-			return;
-		}
-
-		if (input.toLowerCase() === 'd') {
-			if (selectedIds.size === 0) {
-				setStatus('Select at least one project before deleting.');
-				return;
-			}
-			startDelete();
-			return;
-		}
-
-		if (input.toLowerCase() === 'q') {
-			exit();
 		}
 	});
 
 	if (needsApiKey) {
 		return (
 			<Box flexDirection="column">
-				<Header />
+				<Header
+					totalLabel={headerTotalLabel}
+					selectedLabel={headerSelectedLabel}
+					durationLabel={headerDurationLabel}
+				/>
 				{fullDiskBanner}
 				<ApiKeyBlock />
 			</Box>
@@ -435,9 +490,18 @@ export default function App({
 	if (isLoading) {
 		return (
 			<Box flexDirection="column">
-				<Header />
+				<Header
+					totalLabel={headerTotalLabel}
+					selectedLabel={headerSelectedLabel}
+					durationLabel={headerDurationLabel}
+				/>
 				{fullDiskBanner}
 				<Text color="#6B7280">Scanning projects...</Text>
+				<ScanStatus
+					foundCount={scanFoundCount}
+					currentPath={scanCurrentPath}
+					elapsedMs={scanElapsedMs}
+				/>
 			</Box>
 		);
 	}
@@ -445,7 +509,11 @@ export default function App({
 	if (error) {
 		return (
 			<Box flexDirection="column">
-				<Header />
+				<Header
+					totalLabel={headerTotalLabel}
+					selectedLabel={headerSelectedLabel}
+					durationLabel={headerDurationLabel}
+				/>
 				{fullDiskBanner}
 				<Text color="#FF7A00">{error}</Text>
 			</Box>
@@ -454,22 +522,26 @@ export default function App({
 
 	return (
 		<Box flexDirection="column">
-			<Header />
+			<Header
+				totalLabel={headerTotalLabel}
+				selectedLabel={headerSelectedLabel}
+				durationLabel={headerDurationLabel}
+			/>
 			{fullDiskBanner}
 			<Box flexDirection="row">
 				<Box width={listWidth} flexDirection="column">
-					<ProjectList
-						projects={projects}
-						cursorIndex={cursorIndex}
-						selectedIds={selectedIds}
-						availableWidth={listWidth}
-					/>
+				<ProjectList
+					projects={projects}
+					cursorIndex={cursorIndex}
+					selectedIds={selectedIds}
+					availableWidth={listWidth}
+				/>
+			</Box>
+			{showDetails ? (
+				<Box flexGrow={1} flexDirection="column">
+					<ProjectDetails project={selectedProject} showAllReasons={showAllReasons} />
 				</Box>
-				{showDetails ? (
-					<Box flexGrow={1} flexDirection="column">
-						<ProjectDetails project={selectedProject} />
-					</Box>
-				) : null}
+			) : null}
 			</Box>
 			<FooterStatus
 				projects={projects}

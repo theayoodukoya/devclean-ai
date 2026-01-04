@@ -1,5 +1,41 @@
 # DevClean AI Roadmap
 
+## V2.0 Desktop Plan (Tauri)
+
+See `docs/IMPLEMENTATION.md` for phase-by-phase execution details.
+
+### Phase 0 - Decision + Scaffolding
+- Lock in Tauri + React + Vite (desktop UI)
+- Define IPC contract between UI and core engine
+- Create monorepo layout: `apps/desktop`, `packages/core-rs`, `packages/shared`
+
+### Phase 1 - Core Engine in Rust
+- Scanner (fast globbing, skip lists, permission handling)
+- Risk scoring (heuristics)
+- Size calculation + caching
+- Stream scan progress for UI
+
+### Phase 2 - Desktop UI (Mouse-first)
+- Project list with multi-select (Shift/Cmd/Ctrl click)
+- Right panel with risk details + reasons
+- Top bar with scan progress + reclaimable totals
+- Sorting + filtering toolbar
+
+### Phase 3 - Safety + Deletion
+- Default to deps-only delete
+- Quarantine folder (undo delete)
+- Review screen + export plan (JSON/CSV)
+
+### Phase 4 - AI + Personalization
+- Gemini integration (HTTP)
+- Cache by hash
+- "Was this safe?" feedback
+
+### Phase 5 - Release + Distribution
+- Auto-updates
+- Signed builds (macOS/Windows)
+- GitHub releases + installers
+
 ## MVP (Ship)
 
 - Fast scan + cross-platform paths (fast-glob)

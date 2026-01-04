@@ -10,3 +10,12 @@ export const formatBytes = (bytes: number) => {
 	const rounded = value >= 10 ? Math.round(value) : Math.round(value * 10) / 10;
 	return `${rounded} ${units[index]}`;
 };
+
+export const formatDuration = (milliseconds: number | null) => {
+	if (!milliseconds || milliseconds <= 0) return '--';
+	const seconds = milliseconds / 1000;
+	if (seconds < 60) return `${seconds.toFixed(1)}s`;
+	const minutes = Math.floor(seconds / 60);
+	const remaining = Math.round(seconds % 60);
+	return `${minutes}m ${remaining}s`;
+};

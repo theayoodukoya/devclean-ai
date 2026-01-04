@@ -6,6 +6,7 @@ import {RiskLegend} from './RiskLegend.js';
 
 export type ProjectDetailsProps = {
 	project: ProjectRecord | undefined;
+	showAllReasons: boolean;
 };
 
 const line = (label: string, value: string) => (
@@ -15,7 +16,7 @@ const line = (label: string, value: string) => (
 	</Text>
 );
 
-export const ProjectDetails = ({project}: ProjectDetailsProps) => {
+export const ProjectDetails = ({project, showAllReasons}: ProjectDetailsProps) => {
 	if (!project) {
 		return <Text color="#6B7280">No selection</Text>;
 	}
@@ -41,10 +42,15 @@ export const ProjectDetails = ({project}: ProjectDetailsProps) => {
 				{project.risk.reasons.length === 0 ? (
 					<Text color="#6B7280">No reasons provided.</Text>
 				) : (
-					project.risk.reasons.slice(0, 6).map(reason => (
-						<Text key={reason}>- {reason}</Text>
-					))
+					(showAllReasons ? project.risk.reasons : project.risk.reasons.slice(0, 6)).map(
+						reason => (
+							<Text key={reason}>- {reason}</Text>
+						),
+					)
 				)}
+				{project.risk.reasons.length > 6 && !showAllReasons ? (
+					<Text color="#6B7280">Ctrl+E to show all reasons.</Text>
+				) : null}
 			</Box>
 			<RiskLegend />
 		</Box>

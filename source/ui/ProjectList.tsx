@@ -12,10 +12,23 @@ const riskColors: Record<RiskClass, string> = {
 
 const selectionBg = '#0047AB';
 const selectionFg = '#FFFFFF';
+const cursorBg = '#0F2A44';
 
 const safeTruncate = (value: string, length: number) => {
 	if (value.length <= length) return value.padEnd(length);
 	return `${value.slice(0, Math.max(0, length - 3))}...`;
+};
+
+const tailTruncate = (value: string, length: number) => {
+	if (value.length <= length) return value.padEnd(length);
+	const parts = value.split('/');
+	const sep = '/';
+	const tailCount = Math.min(3, parts.length);
+	const tail = parts.slice(-tailCount).join(sep);
+	if (tail.length + 4 >= length) {
+		return `...${tail.slice(-Math.max(0, length - 3))}`;
+	}
+	return `...${sep}${tail}`.padEnd(length);
 };
 
 export type ProjectListProps = {
@@ -76,6 +89,9 @@ export const ProjectList = ({
 			<Box>
 				<Text color="#6B7280">{header}</Text>
 			</Box>
+			<Text color="#6B7280">
+				Risk: Critical 8-10 | Active 5-7 | Burner 0-4 | Modified = days since change | Size = folder size
+			</Text>
 			{projects.map((project, index) => {
 				const isSelected = selectedIds.has(project.id);
 				const isCursor = index === cursorIndex;
@@ -85,7 +101,7 @@ export const ProjectList = ({
 				const name = safeTruncate(project.name, nameWidth).padEnd(nameWidth);
 				const modified = `${project.lastModifiedDays}d`.padEnd(modifiedWidth);
 				const sizeLabel = safeTruncate(formatBytes(project.sizeBytes), sizeWidth).padEnd(sizeWidth);
-				const pathLabel = safeTruncate(project.path, pathWidth);
+				const pathLabel = tailTruncate(project.path, pathWidth);
 				const score = project.risk.score.toString().padEnd(scoreWidth);
 				const selText = `${cursor}${indicator} `.padEnd(selWidth);
 
@@ -114,6 +130,14 @@ export const ProjectList = ({
 
 				const riskColor = riskColors[project.risk.className];
 				const rowWithRisk = row.replace(label, chalk.hex(riskColor)(label));
+
+				if (isCursor) {
+					return (
+						<Text key={project.id} backgroundColor={cursorBg}>
+							{rowWithRisk}
+						</Text>
+					);
+				}
 
 				return <Text key={project.id}>{rowWithRisk}</Text>;
 			})}

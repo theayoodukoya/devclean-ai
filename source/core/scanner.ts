@@ -168,8 +168,14 @@ const getDirectorySize = async (projectDir: string) => {
 	return total;
 };
 
+export type ScanProgress = {
+	foundCount: number;
+	currentPath: string;
+};
+
 export type ScanOptions = {
 	scanAll?: boolean;
+	onProgress?: (progress: ScanProgress) => void;
 };
 
 export const scanProjects = async (
@@ -177,7 +183,10 @@ export const scanProjects = async (
 	options: ScanOptions = {},
 ): Promise<ProjectMeta[]> => {
 	const ignore = buildIgnore(Boolean(options.scanAll));
-	const packageJsonPaths = await fg('**/package.json', {
+	const packageJsonPaths: string[] = [];
+	let foundCount = 0;
+
+	const stream = fg.stream('**/package.json', {
 		cwd: root,
 		absolute: true,
 		ignore,
@@ -185,6 +194,13 @@ export const scanProjects = async (
 		followSymbolicLinks: false,
 		suppressErrors: true,
 	});
+
+	for await (const entry of stream) {
+		const packageJsonPath = entry.toString();
+		packageJsonPaths.push(packageJsonPath);
+		foundCount += 1;
+		options.onProgress?.({foundCount, currentPath: packageJsonPath});
+	}
 
 	const projects: ProjectMeta[] = [];
 
