@@ -1,8 +1,10 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+import {defineConfig} from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'node:path';
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
+const rootPath = path.resolve(__dirname, '..', '..');
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
@@ -19,14 +21,22 @@ export default defineConfig(async () => ({
     host: host || false,
     hmr: host
       ? {
-          protocol: "ws",
+          protocol: 'ws',
           host,
           port: 1421,
         }
       : undefined,
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      ignored: ['**/src-tauri/**'],
+    },
+    fs: {
+      allow: [rootPath],
+    },
+  },
+  resolve: {
+    alias: {
+      '@shared': path.resolve(rootPath, 'packages/shared'),
     },
   },
 }));

@@ -3,8 +3,9 @@
 This document is the source of truth for the v2.0 build. Follow phases in order.
 
 ## Status
-- Phase 0 started and scaffolded Tauri template in `apps/desktop`.
-- Rust toolchain is still required to run Tauri dev/build.
+- Phase 0: Tauri scaffold created in `apps/desktop`.
+- Phase 1: Rust core scaffolded in `packages/core-rs` (types, scanner, risk, cache). Cargo tests passed (per user).
+- Phase 2: Desktop UI shell + IPC scan wiring in progress (list, details panel, selection).
 
 ## Prerequisites
 - Node.js 22+
@@ -48,7 +49,7 @@ Goal: Replace Node scanner with a native Rust engine.
 - `types.rs` (ProjectMeta, RiskAssessment)
 
 ### Tests
-- Unit tests for scoring
+- `cargo test` in `packages/core-rs`
 - Integration test scanning a fixture directory
 
 ## Phase 2 - Desktop UI

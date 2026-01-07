@@ -1,5 +1,5 @@
 # DevClean AI Shared Types
 
-Shared types and IPC contract definitions.
+Shared types for IPC between the Tauri UI and Rust core.
 
-Scaffold pending.
+- `types.ts` contains the canonical TypeScript shapes for scan + delete.
