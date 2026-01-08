@@ -31,6 +31,8 @@ export type ProjectRecord = ProjectMeta & {
 export type ScanProgress = {
 	foundCount: number;
 	currentPath: string;
+	scannedCount: number;
+	totalCount?: number;
 	elapsedMs?: number;
 };
 
@@ -42,7 +44,23 @@ export type ScanRequest = {
 };
 
 export type DeleteRequest = {
-	paths: string[];
+	entries: {path: string; isCache?: boolean}[];
 	depsOnly: boolean;
 	dryRun: boolean;
+	quarantine: boolean;
+};
+
+export type DeleteItem = {
+	path: string;
+	sizeBytes: number;
+	action: string;
+	status: string;
+	destination?: string;
+	originalPath?: string;
+};
+
+export type DeleteResponse = {
+	removedCount: number;
+	reclaimedBytes: number;
+	items: DeleteItem[];
 };

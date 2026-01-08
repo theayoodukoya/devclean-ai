@@ -200,6 +200,12 @@ button.ghost {
   animation: slide 1.2s infinite ease-in-out;
 }
 
+.fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ff7a00, #ffc66b);
+  transition: width 0.2s ease;
+}
+
 @keyframes slide {
   0% { left: -30%; }
   50% { left: 35%; }
@@ -269,6 +275,147 @@ button.ghost {
   font-size: 13px;
   color: #7aa3d9;
   cursor: default;
+}
+
+.header-row button {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.header-row button:hover {
+  color: #c9dcf5;
+}
+
+.panel-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 12, 24, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 10;
+}
+
+.modal {
+  width: min(820px, 95vw);
+  background: #0f1b32;
+  border-radius: 16px;
+  border: 1px solid #1f2d4b;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.modal header h3 {
+  margin: 0;
+}
+
+.modal header p {
+  margin: 6px 0 0;
+  color: #7aa3d9;
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.review-options {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.review-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.review-list {
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid #1f2d4b;
+  border-radius: 12px;
+}
+
+.review-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #1f2d4b;
+  font-size: 13px;
+}
+
+.review-row.header {
+  position: sticky;
+  top: 0;
+  background: #0f1b32;
+  color: #7aa3d9;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.review-row:last-child {
+  border-bottom: none;
+}
+
+.review-summary {
+  font-size: 13px;
+  color: #9bb7df;
+}
+
+.notice {
+  background: #12213a;
+  border: 1px solid #1f2d4b;
+  padding: 8px 10px;
+  border-radius: 10px;
+  color: #c9dcf5;
+  font-size: 12px;
+}
+
+.status {
+  color: #9bb7df;
+}
+
+.status.error {
+  color: #ffb3b0;
+}
+
+.modal footer {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.modal footer input {
+  background: #0b1424;
+  border: 1px solid #1f2d4b;
+  color: #e5f0ff;
+  padding: 8px 10px;
+  border-radius: 8px;
+  min-width: 220px;
 }
 
 .risk.critical { color: #ff7a00; }

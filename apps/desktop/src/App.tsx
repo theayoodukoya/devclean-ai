@@ -2,8 +2,15 @@ import React, {useEffect, useMemo, useState} from 'react';
 import {invoke} from '@tauri-apps/api/core';
 import {listen} from '@tauri-apps/api/event';
 import {homeDir, desktopDir, documentDir, downloadDir} from '@tauri-apps/api/path';
-import {open} from '@tauri-apps/plugin-dialog';
-import type {ProjectRecord, ScanProgress, ScanRequest, RiskClass} from '@shared/types';
+import {open, save} from '@tauri-apps/plugin-dialog';
+import type {
+	DeleteRequest,
+	DeleteResponse,
+	ProjectRecord,
+	ScanProgress,
+	ScanRequest,
+	RiskClass,
+} from '@shared/types';
 import './App.css';
 
 const formatBytes = (bytes: number) => {
@@ -82,6 +89,7 @@ export default function App() {
 	const [progress, setProgress] = useState<ScanProgress | null>(null);
 	const [scanStartedAt, setScanStartedAt] = useState<number | null>(null);
 	const [elapsedMs, setElapsedMs] = useState<number | null>(null);
+	const [etaMs, setEtaMs] = useState<number | null>(null);
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -96,6 +104,17 @@ export default function App() {
 	const [scanCaches, setScanCaches] = useState(false);
 	const [quickPaths, setQuickPaths] = useState<{label: string; path: string}[]>([]);
 	const [diskRoot, setDiskRoot] = useState<string | null>(null);
+	const [scanKey, setScanKey] = useState('');
+	const [lastScanDurations, setLastScanDurations] = useState<Record<string, number>>({});
+	const [reclaimedBytes, setReclaimedBytes] = useState(0);
+	const [showReview, setShowReview] = useState(false);
+	const [deleteDepsOnly, setDeleteDepsOnly] = useState(true);
+	const [deleteDryRun, setDeleteDryRun] = useState(true);
+	const [deleteQuarantine, setDeleteQuarantine] = useState(true);
+	const [deletePlan, setDeletePlan] = useState<DeleteResponse | null>(null);
+	const [deleteBusy, setDeleteBusy] = useState(false);
+	const [deleteError, setDeleteError] = useState<string | null>(null);
+	const [confirmText, setConfirmText] = useState('');
 
 	useEffect(() => {
 		let mounted = true;
@@ -145,11 +164,19 @@ export default function App() {
 		if (!isLoading) return;
 		const id = setInterval(() => {
 			if (scanStartedAt) {
-				setElapsedMs(Date.now() - scanStartedAt);
+				const nextElapsed = Date.now() - scanStartedAt;
+				setElapsedMs(nextElapsed);
+				const previousDuration = lastScanDurations[scanKey];
+				if (previousDuration && previousDuration > 0) {
+					const remaining = Math.max(previousDuration - nextElapsed, 0);
+					setEtaMs(remaining);
+				} else {
+					setEtaMs(null);
+				}
 			}
 		}, 200);
 		return () => clearInterval(id);
-	}, [isLoading, scanStartedAt]);
+	}, [isLoading, scanStartedAt, lastScanDurations, scanKey]);
 
 	useEffect(() => {
 		if (!scanAll) return;
@@ -169,6 +196,7 @@ export default function App() {
 		const started = Date.now();
 		setScanStartedAt(started);
 		setElapsedMs(0);
+		setEtaMs(null);
 
 		const resolvedRoot = rootPath.trim() || '.';
 		const request: ScanRequest = {
@@ -177,10 +205,13 @@ export default function App() {
 			aiEnabled,
 			scanCaches,
 		};
+		const nextKey = `${resolvedRoot}|${scanAll ? 'all' : 'root'}|${scanCaches ? 'caches' : 'nocache'}`;
+		setScanKey(nextKey);
 
 		try {
 			const result = await invoke<{projects: ProjectRecord[]}>('scan_start', {request});
 			setProjects(result.projects);
+			setSelectedIds(new Set());
 		} catch (error) {
 			if (typeof error === 'string') {
 				setError(error);
@@ -191,7 +222,9 @@ export default function App() {
 			}
 		} finally {
 			setIsLoading(false);
-			setElapsedMs(Date.now() - started);
+			const finished = Date.now() - started;
+			setElapsedMs(finished);
+			setLastScanDurations(prev => ({...prev, [nextKey]: finished}));
 		}
 	};
 
@@ -251,10 +284,21 @@ export default function App() {
 		return sorted;
 	}, [projects, riskFilter, searchQuery, sortKey, sortDir]);
 
-	const totals = useMemo(() => {
-		const total = projects.reduce((sum, project) => sum + project.sizeBytes, 0);
-		return formatBytes(total);
-	}, [projects]);
+	const progressPercent = useMemo(() => {
+		if (!progress?.totalCount || progress.totalCount <= 0) return null;
+		const ratio = Math.min(progress.scannedCount / progress.totalCount, 1);
+		if (!Number.isFinite(ratio)) return null;
+		return Math.round(ratio * 1000) / 10;
+	}, [progress]);
+
+	const liveEtaMs = useMemo(() => {
+		if (!progress?.totalCount || progress.totalCount <= 0) return etaMs;
+		if (!elapsedMs || elapsedMs <= 0 || progress.scannedCount <= 0) return etaMs;
+		const rate = progress.scannedCount / elapsedMs;
+		if (!Number.isFinite(rate) || rate <= 0) return etaMs;
+		const remaining = Math.max(progress.totalCount - progress.scannedCount, 0);
+		return Math.round(remaining / rate);
+	}, [progress, elapsedMs, etaMs]);
 
 	const selectedTotal = useMemo(() => {
 		let total = 0;
@@ -266,9 +310,20 @@ export default function App() {
 		return formatBytes(total);
 	}, [projects, selectedIds]);
 
+	const reclaimableAfterDeletes = useMemo(() => {
+		const totalBytes = projects.reduce((sum, project) => sum + project.sizeBytes, 0);
+		return formatBytes(Math.max(totalBytes - reclaimedBytes, 0));
+	}, [projects, reclaimedBytes]);
+
+	const reclaimedTotal = useMemo(() => formatBytes(reclaimedBytes), [reclaimedBytes]);
+
 	const selectedProject = useMemo(() => {
 		const first = projects.find(project => selectedIds.has(project.id));
 		return first ?? null;
+	}, [projects, selectedIds]);
+
+	const selectedProjects = useMemo(() => {
+		return projects.filter(project => selectedIds.has(project.id));
 	}, [projects, selectedIds]);
 
 	const onRowClick = (
@@ -322,6 +377,118 @@ export default function App() {
 		}
 	};
 
+	const buildDeleteRequest = (dryRunOverride?: boolean): DeleteRequest => ({
+		entries: selectedProjects.map(project => ({
+			path: project.path,
+			isCache: project.isCache,
+		})),
+		depsOnly: deleteDepsOnly,
+		dryRun: dryRunOverride ?? deleteDryRun,
+		quarantine: deleteQuarantine,
+	});
+
+	const refreshPlan = async () => {
+		if (selectedProjects.length === 0) {
+			setDeletePlan(null);
+			return;
+		}
+		setDeleteBusy(true);
+		setDeleteError(null);
+		try {
+			const plan = await invoke<DeleteResponse>('delete_execute', {
+				request: buildDeleteRequest(true),
+			});
+			setDeletePlan(plan);
+		} catch (error) {
+			setDeleteError(error instanceof Error ? error.message : 'Failed to build plan');
+		} finally {
+			setDeleteBusy(false);
+		}
+	};
+
+	useEffect(() => {
+		if (!showReview) return;
+		void refreshPlan();
+	}, [showReview, deleteDepsOnly, deleteQuarantine, selectedProjects]);
+
+	const onExecuteDelete = async () => {
+		if (selectedProjects.length === 0) return;
+		setDeleteBusy(true);
+		setDeleteError(null);
+		try {
+			const response = await invoke<DeleteResponse>('delete_execute', {
+				request: buildDeleteRequest(),
+			});
+			setDeletePlan(response);
+			if (!deleteDryRun) {
+				setReclaimedBytes(prev => prev + response.reclaimedBytes);
+				const removedPaths = new Set(
+					response.items
+						.filter(item => item.status === 'deleted' || item.status === 'moved')
+						.map(item => item.path),
+				);
+				if (removedPaths.size > 0) {
+					setProjects(prevProjects =>
+						prevProjects.filter(project => !removedPaths.has(project.path)),
+					);
+					setSelectedIds(new Set());
+				}
+			}
+		} catch (error) {
+			setDeleteError(error instanceof Error ? error.message : 'Delete failed');
+		} finally {
+			setDeleteBusy(false);
+		}
+	};
+
+	const onExportPlan = async (format: 'json' | 'csv') => {
+		if (!deletePlan || deletePlan.items.length === 0) {
+			setDeleteError('No plan to export.');
+			return;
+		}
+		const content =
+			format === 'json'
+				? JSON.stringify(deletePlan.items, null, 2)
+				: [
+						'path,sizeBytes,action,status,destination',
+						...deletePlan.items.map(item =>
+							[
+								item.path.replace(/"/g, '""'),
+								item.sizeBytes,
+								item.action,
+								item.status,
+								item.destination ?? '',
+							]
+								.map(value => `"${value}"`)
+								.join(',')
+						),
+					].join('\n');
+		try {
+			const target = await save({
+				title: 'Export delete plan',
+				defaultPath: `devclean-plan.${format}`,
+			});
+			if (!target || typeof target !== 'string') return;
+			await invoke('export_plan', {request: {path: target, contents: content}});
+		} catch (error) {
+			setDeleteError(error instanceof Error ? error.message : 'Export failed');
+		}
+	};
+
+	const sortLabel = (key: typeof sortKey, label: string) => {
+		if (sortKey !== key) return label;
+		return `${label} ${sortDir === 'asc' ? '↑' : '↓'}`;
+	};
+
+	const onHeaderSort = (key: typeof sortKey) => {
+		if (sortKey === key) {
+			setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+			return;
+		}
+		setSortKey(key);
+		setSortDir('desc');
+	};
+
 	return (
 		<ErrorBoundary>
 			<div className="app">
@@ -331,9 +498,13 @@ export default function App() {
 					<p>Project Reclaim - Risk Engine</p>
 				</div>
 				<div className="stats">
-					<span>Reclaimable {isLoading ? '...' : totals}</span>
+					<span>Reclaimable {isLoading ? '...' : reclaimableAfterDeletes}</span>
 					<span>Selected {selectedTotal}</span>
-					<span>Scan {formatDuration(isLoading ? elapsedMs : elapsedMs)}</span>
+					<span>Reclaimed {reclaimedTotal}</span>
+					<span>
+						Scan {formatDuration(elapsedMs)}
+						{isLoading && liveEtaMs !== null ? ` · ETA ${formatDuration(liveEtaMs)}` : ''}
+					</span>
 				</div>
 			</header>
 
@@ -343,7 +514,21 @@ export default function App() {
 						<h2>Scan</h2>
 						<p>Risk: Critical 8-10 | Active 5-7 | Burner 0-4</p>
 					</div>
-					<button onClick={startScan} disabled={isLoading}>Rescan</button>
+					<div className="panel-actions">
+						<button onClick={startScan} disabled={isLoading}>Rescan</button>
+						<button
+							type="button"
+							className="ghost"
+							disabled={selectedProjects.length === 0 || isLoading}
+							onClick={() => {
+								setShowReview(true);
+								setConfirmText('');
+								setDeleteError(null);
+							}}
+						>
+							Review ({selectedProjects.length})
+						</button>
+					</div>
 				</div>
 
 				<div className="toolbar">
@@ -460,11 +645,21 @@ export default function App() {
 				{isLoading ? (
 					<div className="loader">
 						<div className="bar">
-							<div className="pulse" />
+							{progressPercent === null ? (
+								<div className="pulse" />
+							) : (
+								<div className="fill" style={{width: `${progressPercent}%`}} />
+							)}
 						</div>
 						<div className="loader-meta">
-							<span>Scanning... {formatDuration(elapsedMs)}</span>
-							<span>Found {progress?.foundCount ?? 0} package.json files</span>
+							<span>
+								Scanning... {formatDuration(elapsedMs)}
+								{liveEtaMs !== null ? ` · ETA ${formatDuration(liveEtaMs)}` : ''}
+							</span>
+							<span>
+								Found {progress?.foundCount ?? 0} package.json files
+								{progress?.totalCount ? ` · ${progress.scannedCount}/${progress.totalCount} entries` : ''}
+							</span>
 							{progress?.currentPath ? (
 								<span>Last: {truncateMiddle(progress.currentPath, 80)}</span>
 							) : null}
@@ -477,11 +672,19 @@ export default function App() {
 				<div className="content">
 					<div className="table">
 						<div className="row header-row">
-							<span>Name</span>
+							<button type="button" onClick={() => onHeaderSort('name')}>
+								{sortLabel('name', 'Name')}
+							</button>
 							<span>Risk</span>
-							<span>Score</span>
-							<span>Modified</span>
-							<span>Size</span>
+							<button type="button" onClick={() => onHeaderSort('score')}>
+								{sortLabel('score', 'Score')}
+							</button>
+							<button type="button" onClick={() => onHeaderSort('modified')}>
+								{sortLabel('modified', 'Modified')}
+							</button>
+							<button type="button" onClick={() => onHeaderSort('size')}>
+								{sortLabel('size', 'Size')}
+							</button>
 							<span>Path</span>
 						</div>
 						{visibleProjects.map((project, index) => {
@@ -547,7 +750,116 @@ export default function App() {
 					</aside>
 				</div>
 			</section>
-			</div>
-		</ErrorBoundary>
+			{showReview ? (
+				<div className="modal-backdrop" onClick={() => setShowReview(false)}>
+					<div className="modal" onClick={event => event.stopPropagation()}>
+						<header>
+							<div>
+								<h3>Review delete plan</h3>
+								<p>
+									{selectedProjects.length} selected ·{' '}
+									{deletePlan ? formatBytes(deletePlan.reclaimedBytes) : '--'} reclaimable
+								</p>
+							</div>
+							<button type="button" className="ghost" onClick={() => setShowReview(false)}>
+								Close
+							</button>
+						</header>
+						<div className="modal-body">
+							<div className="review-options">
+								<label className="toggle">
+									<input
+										type="checkbox"
+										checked={deleteDepsOnly}
+										onChange={event => setDeleteDepsOnly(event.target.checked)}
+									/>
+									<span>Deps only</span>
+								</label>
+								<label className="toggle">
+									<input
+										type="checkbox"
+										checked={deleteQuarantine}
+										onChange={event => setDeleteQuarantine(event.target.checked)}
+									/>
+									<span>Quarantine</span>
+								</label>
+								<label className="toggle">
+									<input
+										type="checkbox"
+										checked={deleteDryRun}
+										onChange={event => setDeleteDryRun(event.target.checked)}
+									/>
+									<span>Dry run</span>
+								</label>
+							</div>
+
+							<div className="review-actions">
+								<button type="button" className="ghost" onClick={() => onExportPlan('json')}>
+									Export JSON
+								</button>
+								<button type="button" className="ghost" onClick={() => onExportPlan('csv')}>
+									Export CSV
+								</button>
+							</div>
+
+							{deleteDryRun ? (
+								<div className="notice">Dry run is enabled. No files will be removed.</div>
+							) : null}
+
+							{deleteError ? <div className="error">{deleteError}</div> : null}
+							{deleteBusy ? <div className="muted">Building plan...</div> : null}
+
+							{deletePlan ? (
+								<div className="review-summary">
+									{deleteDryRun
+										? `Dry run: ${formatBytes(deletePlan.reclaimedBytes)} would be reclaimed.`
+										: `${deletePlan.removedCount} items removed · ${formatBytes(deletePlan.reclaimedBytes)} reclaimed.`}
+								</div>
+							) : null}
+							{deletePlan ? (
+								<div className="review-list">
+									<div className="review-row header">
+										<span>Path</span>
+										<span>Size</span>
+										<span>Action</span>
+										<span>Status</span>
+									</div>
+									{deletePlan.items.map(item => (
+										<div key={item.path} className="review-row">
+											<span>{tailPath(item.path, 4)}</span>
+											<span>{formatBytes(item.sizeBytes)}</span>
+											<span className="muted">{item.action}</span>
+											<span className={item.status.startsWith('error') ? 'status error' : 'status'}>
+												{item.status}
+											</span>
+										</div>
+									))}
+								</div>
+							) : (
+								<p className="muted">No plan generated yet.</p>
+							)}
+						</div>
+						<footer>
+							{deleteDryRun ? null : (
+								<input
+									value={confirmText}
+									onChange={event => setConfirmText(event.target.value)}
+									placeholder="Type DELETE to confirm"
+									style={{display: 'none'}}
+								/>
+							)}
+							<button
+								type="button"
+								onClick={onExecuteDelete}
+								disabled={deleteBusy || selectedProjects.length === 0}
+							>
+								{deleteDryRun ? 'Run dry delete' : 'Delete now'}
+							</button>
+						</footer>
+					</div>
+				</div>
+			) : null}
+		</div>
+	</ErrorBoundary>
 	);
 }

@@ -52,4 +52,6 @@ pub struct ProjectRecord {
 pub struct ScanProgress {
     pub found_count: usize,
     pub current_path: String,
+    pub scanned_count: usize,
+    pub total_count: Option<usize>,
 }

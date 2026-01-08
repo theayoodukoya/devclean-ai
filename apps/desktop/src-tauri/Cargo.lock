@@ -589,6 +589,7 @@ name = "devclean-desktop"
 version = "0.1.0"
 dependencies = [
  "devclean-core",
+ "dirs",
  "serde",
  "serde_json",
  "tauri",

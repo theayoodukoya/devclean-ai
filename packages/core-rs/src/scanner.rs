@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use walkdir::{DirEntry, WalkDir};
 
 const DEFAULT_IGNORES: &[&str] = &[
@@ -309,8 +309,22 @@ pub fn scan_projects<F>(
 where
     F: FnMut(ScanProgress),
 {
+    let mut total_entries = 0usize;
+    let count_walker = WalkDir::new(root)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|entry| !is_ignored(entry, scan_all));
+
+    for entry in count_walker {
+        if entry.is_ok() {
+            total_entries += 1;
+        }
+    }
+
     let mut package_paths: Vec<PathBuf> = Vec::new();
     let mut found_count = 0usize;
+    let mut scanned_count = 0usize;
+    let mut last_emit = Instant::now();
 
     let walker = WalkDir::new(root)
         .follow_links(false)
@@ -318,17 +332,33 @@ where
         .filter_entry(|entry| !is_ignored(entry, scan_all));
 
     for entry in walker.flatten() {
+        scanned_count += 1;
         if entry.file_type().is_file() && entry.file_name() == "package.json" {
             let path = entry.path().to_path_buf();
             package_paths.push(path.clone());
             found_count += 1;
-            if let Some(callback) = on_progress.as_mut() {
+        }
+
+        if let Some(callback) = on_progress.as_mut() {
+            if last_emit.elapsed().as_millis() >= 120 || scanned_count % 200 == 0 {
+                last_emit = Instant::now();
                 callback(ScanProgress {
                     found_count,
-                    current_path: path.to_string_lossy().to_string(),
+                    current_path: entry.path().to_string_lossy().to_string(),
+                    scanned_count,
+                    total_count: Some(total_entries),
                 });
             }
         }
+    }
+
+    if let Some(callback) = on_progress.as_mut() {
+        callback(ScanProgress {
+            found_count,
+            current_path: root.to_string_lossy().to_string(),
+            scanned_count,
+            total_count: Some(total_entries),
+        });
     }
 
     let mut projects = Vec::new();
