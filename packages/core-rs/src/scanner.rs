@@ -300,24 +300,32 @@ fn scan_cache_dirs() -> Vec<ProjectMeta> {
     projects
 }
 
+pub struct ScanResult {
+    pub projects: Vec<ProjectMeta>,
+    pub total_entries: usize,
+    pub skipped_entries: usize,
+}
+
 pub fn scan_projects<F>(
     root: &Path,
     scan_all: bool,
     scan_caches: bool,
     mut on_progress: Option<F>,
-) -> Vec<ProjectMeta>
+) -> ScanResult
 where
     F: FnMut(ScanProgress),
 {
     let mut total_entries = 0usize;
+    let mut skipped_entries = 0usize;
     let count_walker = WalkDir::new(root)
         .follow_links(false)
         .into_iter()
         .filter_entry(|entry| !is_ignored(entry, scan_all));
 
     for entry in count_walker {
-        if entry.is_ok() {
-            total_entries += 1;
+        match entry {
+            Ok(_) => total_entries += 1,
+            Err(_) => skipped_entries += 1,
         }
     }
 
@@ -435,5 +443,9 @@ where
     }
 
     projects.sort_by(|a, b| a.path.cmp(&b.path));
-    projects
+    ScanResult {
+        projects,
+        total_entries,
+        skipped_entries,
+    }
 }

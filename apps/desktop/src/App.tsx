@@ -6,7 +6,10 @@ import {open, save} from '@tauri-apps/plugin-dialog';
 import type {
 	DeleteRequest,
 	DeleteResponse,
+	FeedbackRequest,
+	FeedbackEntry,
 	ProjectRecord,
+	ScanResponse,
 	ScanProgress,
 	ScanRequest,
 	RiskClass,
@@ -115,6 +118,15 @@ export default function App() {
 	const [deleteBusy, setDeleteBusy] = useState(false);
 	const [deleteError, setDeleteError] = useState<string | null>(null);
 	const [confirmText, setConfirmText] = useState('');
+	const [feedbackNote, setFeedbackNote] = useState<string | null>(null);
+	const [aiStats, setAiStats] = useState<{cacheHits: number; cacheMisses: number; calls: number} | null>(null);
+	const [aiKeyStatus, setAiKeyStatus] = useState<{hasKey: boolean; model: string; source: string} | null>(null);
+	const [showAiModal, setShowAiModal] = useState(false);
+	const [aiKeyInput, setAiKeyInput] = useState('');
+	const [aiKeyMessage, setAiKeyMessage] = useState<string | null>(null);
+	const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+	const [feedbackList, setFeedbackList] = useState<FeedbackEntry[]>([]);
+	const [scanSummary, setScanSummary] = useState<ScanResponse['summary'] | null>(null);
 
 	useEffect(() => {
 		let mounted = true;
@@ -126,6 +138,24 @@ export default function App() {
 		return () => {
 			mounted = false;
 			void unlisten.then(off => off());
+		};
+	}, []);
+
+	useEffect(() => {
+		let active = true;
+		const loadStatus = async () => {
+			try {
+				const status = await invoke<{hasKey: boolean; model: string; source: string}>('ai_status');
+				if (active) setAiKeyStatus(status);
+			} catch {
+				if (active) {
+					setAiKeyStatus({hasKey: false, model: 'gemini-2.5-flash-lite', source: 'none'});
+				}
+			}
+		};
+		void loadStatus();
+		return () => {
+			active = false;
 		};
 	}, []);
 
@@ -209,8 +239,10 @@ export default function App() {
 		setScanKey(nextKey);
 
 		try {
-			const result = await invoke<{projects: ProjectRecord[]}>('scan_start', {request});
+			const result = await invoke<ScanResponse>('scan_start', {request});
 			setProjects(result.projects);
+			setAiStats(result.aiStats ?? null);
+			setScanSummary(result.summary ?? null);
 			setSelectedIds(new Set());
 		} catch (error) {
 			if (typeof error === 'string') {
@@ -475,6 +507,58 @@ export default function App() {
 		}
 	};
 
+	const submitFeedback = async (vote: 'safe' | 'unsafe') => {
+		if (!selectedProject) return;
+		setFeedbackNote(null);
+		try {
+			const request: FeedbackRequest = {
+				path: selectedProject.path,
+				name: selectedProject.name,
+				riskScore: selectedProject.risk?.score ?? 0,
+				riskClass: selectedProject.risk?.className ?? 'Unknown',
+				vote,
+			};
+			await invoke('feedback_submit', {request});
+			setFeedbackNote(`Feedback saved (${vote}).`);
+		} catch (error) {
+			setFeedbackNote(error instanceof Error ? error.message : 'Feedback failed');
+		}
+	};
+
+	const openFeedbackPanel = async () => {
+		setShowFeedbackModal(true);
+		try {
+			const entries = await invoke<FeedbackEntry[]>('feedback_list');
+			setFeedbackList(entries);
+		} catch {
+			setFeedbackList([]);
+		}
+	};
+
+	const saveAiKey = async () => {
+		setAiKeyMessage(null);
+		try {
+			await invoke('ai_save_key', {key: aiKeyInput});
+			const status = await invoke<{hasKey: boolean; model: string; source: string}>('ai_status');
+			setAiKeyStatus(status);
+			setAiKeyInput('');
+			setShowAiModal(false);
+		} catch (error) {
+			setAiKeyMessage(error instanceof Error ? error.message : 'Failed to save key');
+		}
+	};
+
+	const clearAiKey = async () => {
+		setAiKeyMessage(null);
+		try {
+			await invoke('ai_clear_key');
+			const status = await invoke<{hasKey: boolean; model: string; source: string}>('ai_status');
+			setAiKeyStatus(status);
+		} catch (error) {
+			setAiKeyMessage(error instanceof Error ? error.message : 'Failed to clear key');
+		}
+	};
+
 	const sortLabel = (key: typeof sortKey, label: string) => {
 		if (sortKey !== key) return label;
 		return `${label} ${sortDir === 'asc' ? '↑' : '↓'}`;
@@ -501,6 +585,9 @@ export default function App() {
 					<span>Reclaimable {isLoading ? '...' : reclaimableAfterDeletes}</span>
 					<span>Selected {selectedTotal}</span>
 					<span>Reclaimed {reclaimedTotal}</span>
+					{aiStats ? (
+						<span>AI {aiStats.cacheHits} hit · {aiStats.cacheMisses} miss · {aiStats.calls} calls</span>
+					) : null}
 					<span>
 						Scan {formatDuration(elapsedMs)}
 						{isLoading && liveEtaMs !== null ? ` · ETA ${formatDuration(liveEtaMs)}` : ''}
@@ -527,6 +614,20 @@ export default function App() {
 							}}
 						>
 							Review ({selectedProjects.length})
+						</button>
+						<button
+							type="button"
+							className="ghost"
+							onClick={() => setShowAiModal(true)}
+						>
+							AI key
+						</button>
+						<button
+							type="button"
+							className="ghost"
+							onClick={openFeedbackPanel}
+						>
+							Feedback
 						</button>
 					</div>
 				</div>
@@ -604,7 +705,13 @@ export default function App() {
 						<input
 							type="checkbox"
 							checked={aiEnabled}
-							onChange={event => setAiEnabled(event.target.checked)}
+							onChange={event => {
+								const next = event.target.checked;
+								setAiEnabled(next);
+								if (next && !aiKeyStatus?.hasKey) {
+									setShowAiModal(true);
+								}
+							}}
 						/>
 						<span>AI</span>
 					</label>
@@ -617,6 +724,16 @@ export default function App() {
 						<span>Caches</span>
 					</label>
 				</div>
+				{aiKeyStatus ? (
+					<div className="ai-status">
+						AI key: {aiKeyStatus.hasKey ? `set (${aiKeyStatus.source})` : 'missing'} · Model {aiKeyStatus.model}
+					</div>
+				) : null}
+				{scanSummary ? (
+					<div className="scan-summary">
+						Scan summary: {scanSummary.projectCount} projects · {scanSummary.cacheCount} caches ({formatBytes(scanSummary.cacheBytes)}) · {scanSummary.totalEntries} entries · {scanSummary.skippedEntries} skipped
+					</div>
+				) : null}
 				{quickPaths.length > 0 ? (
 					<div className="quick-paths">
 						<span>Quick paths:</span>
@@ -728,6 +845,7 @@ export default function App() {
 									<strong>Risk:</strong>{' '}
 									{selectedProject.risk?.className ?? 'Unknown'} ({selectedProject.risk?.score ?? '--'})
 								</p>
+								<p><strong>Source:</strong> {selectedProject.risk?.source ?? 'Heuristic'}</p>
 								<p>
 									<strong>Flags:</strong>{' '}
 									{selectedProject.hasGit ? 'git ' : ''}
@@ -735,6 +853,18 @@ export default function App() {
 									{selectedProject.hasStartupKeyword ? 'startup ' : ''}
 									{selectedProject.isCache ? 'cache' : ''}
 								</p>
+								<div className="feedback">
+									<span>Was this safe?</span>
+									<div className="feedback-actions">
+										<button type="button" className="ghost" onClick={() => submitFeedback('safe')}>
+											Safe
+										</button>
+										<button type="button" className="ghost" onClick={() => submitFeedback('unsafe')}>
+											Unsafe
+										</button>
+									</div>
+									{feedbackNote ? <span className="muted">{feedbackNote}</span> : null}
+								</div>
 								<div className="reason-block">
 									<span>Reasons</span>
 									<ul>
@@ -856,6 +986,80 @@ export default function App() {
 								{deleteDryRun ? 'Run dry delete' : 'Delete now'}
 							</button>
 						</footer>
+					</div>
+				</div>
+			) : null}
+			{showAiModal ? (
+				<div className="modal-backdrop" onClick={() => setShowAiModal(false)}>
+					<div className="modal" onClick={event => event.stopPropagation()}>
+						<header>
+							<div>
+								<h3>Gemini API key</h3>
+								<p>Stored locally in your app data directory. You can also set GEMINI_API_KEY as an env var.</p>
+							</div>
+							<button type="button" className="ghost" onClick={() => setShowAiModal(false)}>
+								Close
+							</button>
+						</header>
+						<div className="modal-body">
+							<label className="field">
+								<span>API key</span>
+								<input
+									value={aiKeyInput}
+									onChange={event => setAiKeyInput(event.target.value)}
+									placeholder="AIza..."
+								/>
+							</label>
+							{aiKeyMessage ? <div className="error">{aiKeyMessage}</div> : null}
+							{aiKeyStatus ? (
+								<div className="muted">Status: {aiKeyStatus.hasKey ? `set (${aiKeyStatus.source})` : 'missing'}</div>
+							) : null}
+						</div>
+						<footer>
+							<button type="button" className="ghost" onClick={clearAiKey}>
+								Clear
+							</button>
+							<button type="button" onClick={saveAiKey}>
+								Save key
+							</button>
+						</footer>
+					</div>
+				</div>
+			) : null}
+			{showFeedbackModal ? (
+				<div className="modal-backdrop" onClick={() => setShowFeedbackModal(false)}>
+					<div className="modal" onClick={event => event.stopPropagation()}>
+						<header>
+							<div>
+								<h3>Feedback log</h3>
+								<p>Recent safety votes captured locally.</p>
+							</div>
+							<button type="button" className="ghost" onClick={() => setShowFeedbackModal(false)}>
+								Close
+							</button>
+						</header>
+						<div className="modal-body">
+							{feedbackList.length === 0 ? (
+								<p className="muted">No feedback yet. Use the Safe/Unsafe buttons in the details panel.</p>
+							) : (
+								<div className="review-list">
+									<div className="review-row header">
+										<span>Project</span>
+										<span>Vote</span>
+										<span>Score</span>
+										<span>When</span>
+									</div>
+									{feedbackList.map(entry => (
+										<div key={`${entry.path}-${entry.createdAt}`} className="review-row">
+											<span>{entry.name}</span>
+											<span className="muted">{entry.vote}</span>
+											<span>{entry.riskScore}</span>
+											<span className="muted">{new Date(entry.createdAt).toLocaleString()}</span>
+										</div>
+									))}
+								</div>
+							)}
+						</div>
 					</div>
 				</div>
 			) : null}

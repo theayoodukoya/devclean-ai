@@ -36,11 +36,34 @@ export type ScanProgress = {
 	elapsedMs?: number;
 };
 
+export type AiStats = {
+	cacheHits: number;
+	cacheMisses: number;
+	calls: number;
+};
+
 export type ScanRequest = {
 	rootPath: string;
 	scanAll: boolean;
 	aiEnabled: boolean;
 	scanCaches: boolean;
+};
+
+export type ScanResponse = {
+	projects: ProjectRecord[];
+	aiStats?: AiStats;
+	summary?: ScanSummary;
+};
+
+export type ScanSummary = {
+	rootPath: string;
+	scanAll: boolean;
+	scanCaches: boolean;
+	totalEntries: number;
+	skippedEntries: number;
+	projectCount: number;
+	cacheCount: number;
+	cacheBytes: number;
 };
 
 export type DeleteRequest = {
@@ -63,4 +86,16 @@ export type DeleteResponse = {
 	removedCount: number;
 	reclaimedBytes: number;
 	items: DeleteItem[];
+};
+
+export type FeedbackRequest = {
+	path: string;
+	name: string;
+	riskScore: number;
+	riskClass: string;
+	vote: 'safe' | 'unsafe';
+};
+
+export type FeedbackEntry = FeedbackRequest & {
+	createdAt: number;
 };

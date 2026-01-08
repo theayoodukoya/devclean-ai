@@ -159,6 +159,18 @@ button.ghost {
   padding-bottom: 8px;
 }
 
+.ai-status {
+  font-size: 12px;
+  color: #7aa3d9;
+  margin-bottom: 8px;
+}
+
+.scan-summary {
+  font-size: 12px;
+  color: #9bb7df;
+  margin-bottom: 10px;
+}
+
 .chip {
   background: #12213a;
   border: 1px solid #1f2d4b;
@@ -462,6 +474,18 @@ button.ghost {
 .reason-block ul {
   padding-left: 16px;
   margin: 0;
+}
+
+.feedback {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.feedback-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .muted {

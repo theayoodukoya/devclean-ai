@@ -1,8 +1,10 @@
 use crate::types::RiskAssessment;
 use serde::{Deserialize, Serialize};
+use dirs::data_dir;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -28,22 +30,55 @@ impl Default for CacheFile {
     }
 }
 
-pub fn cache_path(root: &Path) -> PathBuf {
+fn root_cache_path(root: &Path) -> PathBuf {
     root.join(".devclean-cache.json")
 }
 
+fn app_cache_path(root: &Path) -> Option<PathBuf> {
+    let base = data_dir()?.join("devclean-ai").join("cache");
+    let mut hasher = Sha256::new();
+    hasher.update(root.to_string_lossy().as_bytes());
+    let digest = hex::encode(hasher.finalize());
+    Some(base.join(format!("cache-{digest}.json")))
+}
+
+pub fn cache_path(root: &Path) -> PathBuf {
+    root_cache_path(root)
+}
+
 pub fn read_cache(root: &Path) -> CacheFile {
-    let path = cache_path(root);
-    let Ok(contents) = fs::read_to_string(path) else {
-        return CacheFile::default();
-    };
-    serde_json::from_str(&contents).unwrap_or_default()
+    let primary = root_cache_path(root);
+    if let Ok(contents) = fs::read_to_string(&primary) {
+        return serde_json::from_str(&contents).unwrap_or_default();
+    }
+
+    if let Some(fallback) = app_cache_path(root) {
+        if let Ok(contents) = fs::read_to_string(&fallback) {
+            return serde_json::from_str(&contents).unwrap_or_default();
+        }
+    }
+
+    CacheFile::default()
 }
 
 pub fn write_cache(root: &Path, cache: &CacheFile) -> std::io::Result<()> {
-    let path = cache_path(root);
     let data = serde_json::to_string_pretty(cache).unwrap_or_else(|_| "{}".to_string());
-    fs::write(path, data)
+    let primary = root_cache_path(root);
+    if fs::write(&primary, &data).is_ok() {
+        return Ok(());
+    }
+
+    if let Some(fallback) = app_cache_path(root) {
+        if let Some(parent) = fallback.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        return fs::write(fallback, data);
+    }
+
+    Err(io::Error::new(
+        io::ErrorKind::Other,
+        "Unable to write cache file",
+    ))
 }
 
 pub fn get_cached_assessment(cache: &CacheFile, key: &str, hash: &str) -> Option<RiskAssessment> {
