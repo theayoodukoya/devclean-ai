@@ -21,6 +21,14 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  padding: 16px 8px 12px;
+  margin: -16px -8px 0;
+  background: rgba(11, 20, 36, 0.85);
+  backdrop-filter: blur(10px);
+  transition: box-shadow 0.2s ease, background 0.2s ease;
 }
 
 .header h1 {
@@ -31,6 +39,11 @@ body {
 .header p {
   margin: 6px 0 0 0;
   color: #7aa3d9;
+}
+
+.header.scrolled {
+  box-shadow: 0 12px 24px rgba(7, 14, 28, 0.55);
+  background: rgba(11, 20, 36, 0.95);
 }
 
 .stats {
@@ -52,6 +65,13 @@ body {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
+  position: sticky;
+  top: 76px;
+  z-index: 6;
+  padding: 12px 8px 10px;
+  margin: -12px -8px 12px;
+  background: rgba(15, 27, 50, 0.95);
+  backdrop-filter: blur(8px);
 }
 
 .panel-header h2 {
@@ -446,6 +466,9 @@ button.ghost {
   border-radius: 12px;
   padding: 16px;
   border: 1px solid #1f2d4b;
+  position: sticky;
+  top: 140px;
+  align-self: flex-start;
 }
 
 .details h3 {

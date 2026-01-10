@@ -119,6 +119,10 @@ export default function App() {
 	const [deleteError, setDeleteError] = useState<string | null>(null);
 	const [confirmText, setConfirmText] = useState('');
 	const [feedbackNote, setFeedbackNote] = useState<string | null>(null);
+	const [feedbackBusy, setFeedbackBusy] = useState(false);
+	const [feedbackQueue, setFeedbackQueue] = useState<
+		{vote: 'safe' | 'unsafe'; project: ProjectRecord; queuedAt: number}[]
+	>([]);
 	const [aiStats, setAiStats] = useState<{cacheHits: number; cacheMisses: number; calls: number} | null>(null);
 	const [aiKeyStatus, setAiKeyStatus] = useState<{hasKey: boolean; model: string; source: string} | null>(null);
 	const [showAiModal, setShowAiModal] = useState(false);
@@ -126,7 +130,9 @@ export default function App() {
 	const [aiKeyMessage, setAiKeyMessage] = useState<string | null>(null);
 	const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 	const [feedbackList, setFeedbackList] = useState<FeedbackEntry[]>([]);
+	const [activeId, setActiveId] = useState<string | null>(null);
 	const [scanSummary, setScanSummary] = useState<ScanResponse['summary'] | null>(null);
+	const [isScrolled, setIsScrolled] = useState(false);
 
 	useEffect(() => {
 		let mounted = true;
@@ -139,6 +145,15 @@ export default function App() {
 			mounted = false;
 			void unlisten.then(off => off());
 		};
+	}, []);
+
+	useEffect(() => {
+		const onScroll = () => {
+			setIsScrolled(window.scrollY > 8);
+		};
+		onScroll();
+		window.addEventListener('scroll', onScroll, {passive: true});
+		return () => window.removeEventListener('scroll', onScroll);
 	}, []);
 
 	useEffect(() => {
@@ -221,6 +236,7 @@ export default function App() {
 		setProjects([]);
 		setProgress(null);
 		setSelectedIds(new Set());
+		setActiveId(null);
 		setLastIndex(null);
 		setIsLoading(true);
 		const started = Date.now();
@@ -350,9 +366,13 @@ export default function App() {
 	const reclaimedTotal = useMemo(() => formatBytes(reclaimedBytes), [reclaimedBytes]);
 
 	const selectedProject = useMemo(() => {
+		if (activeId) {
+			const active = projects.find(project => project.id === activeId);
+			if (active) return active;
+		}
 		const first = projects.find(project => selectedIds.has(project.id));
 		return first ?? null;
-	}, [projects, selectedIds]);
+	}, [projects, selectedIds, activeId]);
 
 	const selectedProjects = useMemo(() => {
 		return projects.filter(project => selectedIds.has(project.id));
@@ -364,6 +384,7 @@ export default function App() {
 		projectId: string,
 		event: React.MouseEvent,
 	) => {
+		setActiveId(projectId);
 		if (event.shiftKey && lastIndex !== null) {
 			const start = Math.min(lastIndex, index);
 			const end = Math.max(lastIndex, index);
@@ -507,23 +528,58 @@ export default function App() {
 		}
 	};
 
-	const submitFeedback = async (vote: 'safe' | 'unsafe') => {
+	const submitFeedback = (vote: 'safe' | 'unsafe') => {
 		if (!selectedProject) return;
+		const entry = {vote, project: selectedProject, queuedAt: Date.now()};
+		setFeedbackQueue(prev => [...prev, entry]);
 		setFeedbackNote(null);
-		try {
-			const request: FeedbackRequest = {
-				path: selectedProject.path,
-				name: selectedProject.name,
-				riskScore: selectedProject.risk?.score ?? 0,
-				riskClass: selectedProject.risk?.className ?? 'Unknown',
-				vote,
-			};
-			await invoke('feedback_submit', {request});
-			setFeedbackNote(`Feedback saved (${vote}).`);
-		} catch (error) {
-			setFeedbackNote(error instanceof Error ? error.message : 'Feedback failed');
-		}
 	};
+
+	useEffect(() => {
+		if (feedbackBusy || feedbackQueue.length === 0) return;
+		let cancelled = false;
+		const next = feedbackQueue[0];
+
+		const run = async () => {
+			setFeedbackBusy(true);
+			try {
+				const request: FeedbackRequest = {
+					path: next.project.path,
+					name: next.project.name,
+					riskScore: next.project.risk?.score ?? 0,
+					riskClass: next.project.risk?.className ?? 'Unknown',
+					vote: next.vote,
+				};
+				await invoke('feedback_submit', {request});
+				if (cancelled) return;
+				const savedAt = Date.now();
+				setFeedbackNote(`Saved ${new Date(savedAt).toLocaleTimeString()}`);
+				setFeedbackList(prev => [
+					{
+						path: request.path,
+						name: request.name,
+						riskScore: request.riskScore,
+						riskClass: request.riskClass,
+						vote: request.vote,
+						createdAt: savedAt,
+					},
+					...prev,
+				]);
+			} catch (error) {
+				if (cancelled) return;
+				setFeedbackNote(error instanceof Error ? error.message : 'Feedback failed');
+			} finally {
+				if (cancelled) return;
+				setFeedbackQueue(prev => prev.slice(1));
+				setFeedbackBusy(false);
+			}
+		};
+
+		void run();
+		return () => {
+			cancelled = true;
+		};
+	}, [feedbackBusy, feedbackQueue]);
 
 	const openFeedbackPanel = async () => {
 		setShowFeedbackModal(true);
@@ -576,7 +632,7 @@ export default function App() {
 	return (
 		<ErrorBoundary>
 			<div className="app">
-			<header className="header">
+			<header className={`header ${isScrolled ? 'scrolled' : ''}`}>
 				<div>
 					<h1>DevClean AI</h1>
 					<p>Project Reclaim - Risk Engine</p>
@@ -729,9 +785,15 @@ export default function App() {
 						AI key: {aiKeyStatus.hasKey ? `set (${aiKeyStatus.source})` : 'missing'} · Model {aiKeyStatus.model}
 					</div>
 				) : null}
+				{isLoading ? (
+					<div className="scan-summary">
+						Current settings: Root {rootPath || '.'} · Full disk {scanAll ? 'on' : 'off'} · Caches {scanCaches ? 'on' : 'off'}
+					</div>
+				) : null}
 				{scanSummary ? (
 					<div className="scan-summary">
-						Scan summary: {scanSummary.projectCount} projects · {scanSummary.cacheCount} caches ({formatBytes(scanSummary.cacheBytes)}) · {scanSummary.totalEntries} entries · {scanSummary.skippedEntries} skipped
+						Last scan: Root {scanSummary.rootPath} · Full disk {scanSummary.scanAll ? 'on' : 'off'} · Caches {scanSummary.scanCaches ? 'on' : 'off'}
+						{' '}· {scanSummary.projectCount} projects · {scanSummary.cacheCount} caches ({formatBytes(scanSummary.cacheBytes)}) · {scanSummary.totalEntries} entries · {scanSummary.skippedEntries} skipped
 					</div>
 				) : null}
 				{quickPaths.length > 0 ? (
@@ -774,8 +836,7 @@ export default function App() {
 								{liveEtaMs !== null ? ` · ETA ${formatDuration(liveEtaMs)}` : ''}
 							</span>
 							<span>
-								Found {progress?.foundCount ?? 0} package.json files
-								{progress?.totalCount ? ` · ${progress.scannedCount}/${progress.totalCount} entries` : ''}
+								Found {progress?.foundCount ?? 0} package.json files · Scanned {progress?.scannedCount ?? 0}/{progress?.totalCount ?? '--'} entries
 							</span>
 							{progress?.currentPath ? (
 								<span>Last: {truncateMiddle(progress.currentPath, 80)}</span>
@@ -856,14 +917,28 @@ export default function App() {
 								<div className="feedback">
 									<span>Was this safe?</span>
 									<div className="feedback-actions">
-										<button type="button" className="ghost" onClick={() => submitFeedback('safe')}>
+										<button
+											type="button"
+											className="ghost"
+											onClick={() => submitFeedback('safe')}
+											disabled={feedbackBusy}
+										>
 											Safe
 										</button>
-										<button type="button" className="ghost" onClick={() => submitFeedback('unsafe')}>
+										<button
+											type="button"
+											className="ghost"
+											onClick={() => submitFeedback('unsafe')}
+											disabled={feedbackBusy}
+										>
 											Unsafe
 										</button>
 									</div>
+									{feedbackBusy ? <span className="muted">Saving…</span> : null}
 									{feedbackNote ? <span className="muted">{feedbackNote}</span> : null}
+									{feedbackQueue.length > 1 ? (
+										<span className="muted">Queued {feedbackQueue.length - 1} more</span>
+									) : null}
 								</div>
 								<div className="reason-block">
 									<span>Reasons</span>

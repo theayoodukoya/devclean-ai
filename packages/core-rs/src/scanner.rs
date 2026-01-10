@@ -340,15 +340,17 @@ where
         .filter_entry(|entry| !is_ignored(entry, scan_all));
 
     for entry in walker.flatten() {
+        let mut found_update = false;
         scanned_count += 1;
         if entry.file_type().is_file() && entry.file_name() == "package.json" {
             let path = entry.path().to_path_buf();
             package_paths.push(path.clone());
             found_count += 1;
+            found_update = true;
         }
 
         if let Some(callback) = on_progress.as_mut() {
-            if last_emit.elapsed().as_millis() >= 120 || scanned_count % 200 == 0 {
+            if found_update || last_emit.elapsed().as_millis() >= 120 || scanned_count % 200 == 0 {
                 last_emit = Instant::now();
                 callback(ScanProgress {
                     found_count,
