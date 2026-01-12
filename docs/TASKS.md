@@ -35,6 +35,8 @@ See `docs/IMPLEMENTATION.md` for phase-by-phase execution details.
 - Auto-updates
 - Signed builds (macOS/Windows)
 - GitHub releases + installers
+- CI build pipeline (macOS/Windows)
+- Desktop release workflow (tagged builds)
 
 ## MVP (Ship)
 
@@ -93,10 +95,15 @@ See `docs/IMPLEMENTATION.md` for phase-by-phase execution details.
 
 ## Runbook (Start Each Time)
 
+### Desktop (Tauri)
 1. If a root artifact named `2.` exists, remove it before installing deps: `rm -rf 2.`
-2. `npm install`
-3. `npm run build`
-4. Run locally: `node dist/cli.js` (or `npm link` for `devclean-ai` command)
+2. `cd apps/desktop && npm install`
+3. `npm run tauri dev`
+
+### Legacy CLI (archived)
+1. `npm install`
+2. `npm run build`
+3. Run locally: `node dist/cli.js`
 
 ## Local Test Walkthrough
 
@@ -122,6 +129,14 @@ See `docs/IMPLEMENTATION.md` for phase-by-phase execution details.
 
 ## Phase Test Commands (Run Every Phase)
 
+### Desktop (Tauri)
+1. Build check (always): `cd apps/desktop && npm run build`
+2. Run dev app: `npm run tauri dev`
+3. Scan smoke test: set root + click Rescan
+4. AI path: set GEMINI key in UI and rescan
+5. Delete flow: open Review delete, preview, then delete
+
+### Legacy CLI (archived)
 1. Build check (always): `npm run build`
 2. Scan smoke test: `node dist/cli.js --path <your_test_dir>`
 3. AI path: `GEMINI_API_KEY="key" node dist/cli.js --path <your_test_dir>`

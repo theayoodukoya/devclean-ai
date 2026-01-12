@@ -4,8 +4,11 @@ This document is the source of truth for the v2.0 build. Follow phases in order.
 
 ## Status
 - Phase 0: Tauri scaffold created in `apps/desktop`.
-- Phase 1: Rust core scaffolded in `packages/core-rs` (types, scanner, risk, cache). Cargo tests passed (per user).
-- Phase 2: Desktop UI shell + IPC scan wiring in progress (list, details panel, selection).
+- Phase 1: Rust core scanner/risk/cache implemented.
+- Phase 2: Desktop UI implemented (scan controls, list, details panel, multi-select, sticky panels).
+- Phase 3: Safety + delete implemented (deps-only default, quarantine, review + export).
+- Phase 4: AI + feedback implemented (Gemini, cache, feedback UI).
+- Phase 5: Release pipeline + updater config in progress (CI + release workflows added, updater enabled).
 
 ## Prerequisites
 - Node.js 22+
@@ -94,13 +97,18 @@ Goal: Bring Gemini back with caching.
 Goal: Stable builds for distribution.
 
 ### Requirements
-- CI build pipelines
-- App signing
-- Auto-updater
-- GitHub releases
+- CI build pipelines (macOS/Windows)
+- GitHub releases with artifacts
+- App signing (macOS/Windows)
+- Optional auto-updater
 
 ### Tests
 - Installer test on macOS + Windows
+
+### Next actions
+- Verify GitHub Actions runs for `desktop-build.yml`.
+- Tag a test release (e.g., `v0.1.0`) and confirm artifacts are attached.
+- Decide updater on/off for v0.1 and add signing secrets if enabled.
 
 ## Rules
 - After each feature/fix, run phase tests and record results in a short note.

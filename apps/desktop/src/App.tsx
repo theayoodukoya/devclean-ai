@@ -3,6 +3,7 @@ import {invoke} from '@tauri-apps/api/core';
 import {listen} from '@tauri-apps/api/event';
 import {homeDir, desktopDir, documentDir, downloadDir} from '@tauri-apps/api/path';
 import {open, save} from '@tauri-apps/plugin-dialog';
+import {check as checkForUpdates} from '@tauri-apps/plugin-updater';
 import type {
 	DeleteRequest,
 	DeleteResponse,
@@ -52,6 +53,12 @@ const tailPath = (value: string, segments = 4) => {
 	return `.../${tail}`;
 };
 
+const InfoTip = ({text}: {text: string}) => (
+	<span className="info-tip" title={text} aria-label={text}>
+		i
+	</span>
+);
+
 const deriveDiskRoot = (homePath: string | null) => {
 	if (!homePath) return null;
 	const windowsRoot = homePath.match(/^[A-Za-z]:\\/);
@@ -95,6 +102,7 @@ export default function App() {
 	const [etaMs, setEtaMs] = useState<number | null>(null);
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [updateMessage, setUpdateMessage] = useState<string | null>(null);
 	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 	const [lastIndex, setLastIndex] = useState<number | null>(null);
 	const [searchQuery, setSearchQuery] = useState('');
@@ -154,6 +162,34 @@ export default function App() {
 		onScroll();
 		window.addEventListener('scroll', onScroll, {passive: true});
 		return () => window.removeEventListener('scroll', onScroll);
+	}, []);
+
+	useEffect(() => {
+		if (import.meta.env.DEV) return;
+		let isActive = true;
+		const run = async () => {
+			try {
+				setUpdateMessage('Checking for updates...');
+				const update = await checkForUpdates();
+				if (!isActive) return;
+				if (!update) {
+					setUpdateMessage(null);
+					return;
+				}
+				setUpdateMessage(`Update ${update.version} available. Downloading...`);
+				await update.downloadAndInstall();
+				if (!isActive) return;
+				setUpdateMessage(`Update ${update.version} installed. Restart the app to apply.`);
+			} catch (err) {
+				if (!isActive) return;
+				setUpdateMessage('Update check failed.');
+				console.error('Updater error', err);
+			}
+		};
+		void run();
+		return () => {
+			isActive = false;
+		};
 	}, []);
 
 	useEffect(() => {
@@ -377,6 +413,33 @@ export default function App() {
 	const selectedProjects = useMemo(() => {
 		return projects.filter(project => selectedIds.has(project.id));
 	}, [projects, selectedIds]);
+
+	const deleteTargets = useMemo(() => {
+		return selectedProjects.map(project => {
+			if (project.isCache) {
+				return {
+					id: project.id,
+					name: project.name,
+					path: project.path,
+					target: 'Cache folder',
+				};
+			}
+			if (deleteDepsOnly) {
+				return {
+					id: project.id,
+					name: project.name,
+					path: project.path,
+					target: 'node_modules + .cache (if present)',
+				};
+			}
+			return {
+				id: project.id,
+				name: project.name,
+				path: project.path,
+				target: 'Project root',
+			};
+		});
+	}, [selectedProjects, deleteDepsOnly]);
 
 	const onRowClick = (
 		list: ProjectRecord[],
@@ -669,7 +732,7 @@ export default function App() {
 								setDeleteError(null);
 							}}
 						>
-							Review ({selectedProjects.length})
+							Review delete ({selectedProjects.length})
 						</button>
 						<button
 							type="button"
@@ -846,6 +909,7 @@ export default function App() {
 				) : null}
 
 				{error ? <div className="error">{error}</div> : null}
+				{updateMessage ? <div className="notice">{updateMessage}</div> : null}
 
 				<div className="content">
 					<div className="table">
@@ -960,7 +1024,7 @@ export default function App() {
 					<div className="modal" onClick={event => event.stopPropagation()}>
 						<header>
 							<div>
-								<h3>Review delete plan</h3>
+								<h3>Review delete</h3>
 								<p>
 									{selectedProjects.length} selected ·{' '}
 									{deletePlan ? formatBytes(deletePlan.reclaimedBytes) : '--'} reclaimable
@@ -975,10 +1039,13 @@ export default function App() {
 								<label className="toggle">
 									<input
 										type="checkbox"
-										checked={deleteDepsOnly}
-										onChange={event => setDeleteDepsOnly(event.target.checked)}
+										checked={!deleteDepsOnly}
+										onChange={event => setDeleteDepsOnly(!event.target.checked)}
 									/>
-									<span>Deps only</span>
+									<span className="toggle-label">
+										Delete entire project
+										<InfoTip text="On: removes the project folder. Off: only removes node_modules/.cache inside each project." />
+									</span>
 								</label>
 								<label className="toggle">
 									<input
@@ -986,7 +1053,10 @@ export default function App() {
 										checked={deleteQuarantine}
 										onChange={event => setDeleteQuarantine(event.target.checked)}
 									/>
-									<span>Quarantine</span>
+									<span className="toggle-label">
+										Quarantine
+										<InfoTip text="On: move items into a local quarantine folder. Off: delete immediately." />
+									</span>
 								</label>
 								<label className="toggle">
 									<input
@@ -994,8 +1064,43 @@ export default function App() {
 										checked={deleteDryRun}
 										onChange={event => setDeleteDryRun(event.target.checked)}
 									/>
-									<span>Dry run</span>
+									<span className="toggle-label">
+										Preview only
+										<InfoTip text="On: build a preview without deleting. Off: delete immediately." />
+									</span>
 								</label>
+							</div>
+
+							{!deleteDepsOnly ? (
+								<div className="warning">
+									Full delete enabled. Selected project folders will be removed. Ensure you have backups before continuing.
+								</div>
+							) : null}
+
+							<div className="target-preview">
+								<div className="target-title">Targets preview</div>
+								<div className="target-list">
+									<div className="target-row header">
+										<span>Project</span>
+										<span>Target</span>
+										<span>Path</span>
+									</div>
+									{deleteTargets.length === 0 ? (
+										<div className="target-row">
+											<span className="muted">No targets selected.</span>
+											<span />
+											<span />
+										</div>
+									) : (
+										deleteTargets.map(target => (
+											<div key={target.id} className="target-row">
+												<span>{target.name}</span>
+												<span className="muted">{target.target}</span>
+												<span>{tailPath(target.path, 4)}</span>
+											</div>
+										))
+									)}
+								</div>
 							</div>
 
 							<div className="review-actions">
@@ -1008,7 +1113,7 @@ export default function App() {
 							</div>
 
 							{deleteDryRun ? (
-								<div className="notice">Dry run is enabled. No files will be removed.</div>
+								<div className="notice">Preview only is enabled. No files will be removed.</div>
 							) : null}
 
 							{deleteError ? <div className="error">{deleteError}</div> : null}
@@ -1017,7 +1122,7 @@ export default function App() {
 							{deletePlan ? (
 								<div className="review-summary">
 									{deleteDryRun
-										? `Dry run: ${formatBytes(deletePlan.reclaimedBytes)} would be reclaimed.`
+										? `Preview: ${formatBytes(deletePlan.reclaimedBytes)} would be reclaimed.`
 										: `${deletePlan.removedCount} items removed · ${formatBytes(deletePlan.reclaimedBytes)} reclaimed.`}
 								</div>
 							) : null}
@@ -1058,7 +1163,7 @@ export default function App() {
 								onClick={onExecuteDelete}
 								disabled={deleteBusy || selectedProjects.length === 0}
 							>
-								{deleteDryRun ? 'Run dry delete' : 'Delete now'}
+								{deleteDryRun ? 'Preview delete' : 'Delete now'}
 							</button>
 						</footer>
 					</div>
